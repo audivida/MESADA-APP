@@ -11,7 +11,7 @@ export function Onboarding() {
   const [busy, setBusy] = useState(false)
 
   return (
-    <main className="welcome">
+    <main className="welcome kid-theme">
       <form
         className="stack card"
         onSubmit={async (e) => {

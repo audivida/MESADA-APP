@@ -26,7 +26,7 @@ export function Welcome() {
   }
 
   return (
-    <main className="welcome">
+    <main className="welcome kid-theme">
       <div className="welcome-hero">
         <div className="coin-logo" aria-hidden>
           ✓

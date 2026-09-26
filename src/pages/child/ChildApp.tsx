@@ -346,6 +346,7 @@ function TrailPage({ childId, avatar, goToday }: { childId: string; avatar: stri
           <span aria-hidden>→</span>
         </button>
       )}
+      <h1 className="page-title center">Estrada das conquistas</h1>
       <Trail earned={earned} avatar={avatar} />
     </div>
   )

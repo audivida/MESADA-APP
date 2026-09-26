@@ -28,7 +28,7 @@ O nome é provisório. Troque em `src/app/brand.ts`, `index.html` e `public/mani
 
 **App**
 - Funciona no navegador e pode ser instalado na tela do celular (PWA).
-- Tema claro e escuro automáticos.
+- Área do filho com visual de jogo (inspirado em jogos como Brawl Stars): noite estrelada, cores vibrantes, contornos grossos, botões 3D e fonte Lilita One. A área dos pais segue clara e calma, com tema claro e escuro automáticos.
 - Movimento em tudo: telas entrando, listas em cascata, botões que afundam no toque, números que sobem, barras que enchem e confete. Quem ativa “reduzir movimento” no celular vê o app parado.
 
 ## Rodar no computador
