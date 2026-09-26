@@ -1,5 +1,5 @@
 /** Troque aqui o nome do app. */
-export const APP_NAME = 'Minha Mesada'
+export const APP_NAME = 'GoOnPlay'
 
 export const AVATARS = ['🦊', '🐢', '🐼', '🦄', '🐯', '🐸', '🐙', '🦁', '🐰', '🐨', '🚀', '⚽']
 

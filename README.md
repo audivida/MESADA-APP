@@ -1,8 +1,8 @@
-# Minha Mesada
+# GoOnPlay
 
 App de mesada para a família: os pais criam tarefas com pontos, os filhos enviam uma foto quando terminam, os pais aprovam e os pontos viram mesada.
 
-O nome é provisório. Troque em `src/app/brand.ts`, `index.html` e `public/manifest.webmanifest`.
+Para trocar o nome, edite `src/app/brand.ts`, `index.html` e `public/manifest.webmanifest`.
 
 ## O que já funciona
 
