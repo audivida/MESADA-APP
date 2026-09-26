@@ -4,6 +4,8 @@ import { useStore } from '../../app/store'
 import { Button, Field, LevelBadge, LevelProgress, Points, Sheet } from '../../components/ui'
 import { GoalCard, LedgerList } from '../../components/Ledger'
 import { ageFrom, balance, formatMoney, totalEarned } from '../../domain/rules'
+import { Trail, TrailSummary } from '../../components/Trail'
+import { streak } from '../../domain/trail'
 
 type Action = null | 'bonus' | 'penalty' | 'payout' | 'goal'
 
@@ -20,6 +22,7 @@ export function ChildSheet({ childId, onClose }: { childId: string; onClose(): v
   const [note, setNote] = useState('')
   const [goal, setGoal] = useState({ title: '', target: '', bonus: '' })
   const [busy, setBusy] = useState(false)
+  const [showTrail, setShowTrail] = useState(false)
   const child = data?.children.find((c) => c.id === childId)
   if (!data || !child) return null
   const { ledger, goals, family } = data
@@ -53,6 +56,17 @@ export function ChildSheet({ childId, onClose }: { childId: string; onClose(): v
           </div>
         </div>
         <LevelProgress earned={earned} />
+        <section className="stack card inset">
+          <div className="row-between">
+            <h3>Trilha</h3>
+            <span className="muted small">🔥 {streak(data.executions, child.id).days} dias seguidos</span>
+          </div>
+          <TrailSummary earned={earned} />
+          <button className="link" onClick={() => setShowTrail(!showTrail)}>
+            {showTrail ? 'Esconder trilha' : `Ver a trilha de ${child.name}`}
+          </button>
+          {showTrail && <Trail earned={earned} avatar={child.avatar} name={child.name} />}
+        </section>
 
         <div className="chip-row">
           <Button variant="ghost" onClick={() => setAction('bonus')}>

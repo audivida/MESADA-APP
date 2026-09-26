@@ -29,7 +29,7 @@ export function ParentApp() {
       <header className="topbar">
         <span className="eyebrow">{data.family.name}</span>
       </header>
-      <main className="content">
+      <main className="content" key={tab}>
         {tab === 'home' && <Overview goApprove={() => setTab('approve')} goRewards={() => setTab('rewards')} goFamily={() => setTab('family')} />}
         {tab === 'approve' && <Approvals />}
         {tab === 'tasks' && <TasksPage />}

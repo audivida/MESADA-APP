@@ -23,10 +23,13 @@ O nome é provisório. Troque em `src/app/brand.ts`, `index.html` e `public/mani
 - Vê as tarefas de hoje, tira a foto e envia.
 - Acompanha saldo, nível, metas, recados dos pais e extrato.
 - Troca pontos por prêmios da loja da família e acompanha os pedidos.
+- Trilha no estilo Duolingo: 4 níveis (Bronze, Prata, Ouro, Diamante) com estações, baús surpresa e troféus. Cada estação libera uma dica de educação financeira.
+- Sequência de dias seguidos (🔥) e comemoração com confete ao chegar numa estação nova ou subir de nível.
 
 **App**
 - Funciona no navegador e pode ser instalado na tela do celular (PWA).
 - Tema claro e escuro automáticos.
+- Movimento em tudo: telas entrando, listas em cascata, botões que afundam no toque, números que sobem, barras que enchem e confete. Quem ativa “reduzir movimento” no celular vê o app parado.
 
 ## Rodar no computador
 
@@ -55,11 +58,11 @@ Para as lojas: o caminho mais simples é empacotar este mesmo app com [Capacitor
 
 | Pasta | O que tem |
 |---|---|
-| `src/domain` | Regras do negócio: tipos, saldo, níveis, tarefa do dia, sugestões por idade |
+| `src/domain` | Regras do negócio: tipos, saldo, níveis, trilha e sequência de dias, tarefa do dia, sugestões por idade |
 | `src/data` | Acesso a dados: `localRepo` (navegador) e `supabaseRepo` (servidor), com a mesma interface |
 | `src/pages/parent` | Telas do responsável |
 | `src/pages/child` | Telas do filho |
-| `src/components` | Peças de interface reaproveitadas |
+| `src/components` | Peças de interface reaproveitadas, trilha (`Trail.tsx`) e animações (`motion.tsx`) |
 | `supabase/migrations` | Banco de dados, regras de segurança e funções |
 | `supabase/tests` | Teste do banco num Postgres local |
 

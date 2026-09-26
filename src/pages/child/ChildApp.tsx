@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { repo } from '../../data'
 import { useStore } from '../../app/store'
 import { compressImage } from '../../app/photo'
@@ -6,18 +6,23 @@ import { Empty, LevelBadge, LevelProgress, TabBar, relativeDay, type Tab } from 
 import { GoalCard, LedgerList } from '../../components/Ledger'
 import { available, balance, formatMoney, taskState, todayISO, totalEarned } from '../../domain/rules'
 import type { Task } from '../../domain/types'
+import { Trail, TrailSummary } from '../../components/Trail'
+import { CountUp, burstFrom, celebrate } from '../../components/motion'
+import { STATIONS, currentStation, streak } from '../../domain/trail'
+import { levelFor } from '../../domain/rules'
 
-type TabId = 'today' | 'shop' | 'wallet'
+type TabId = 'trail' | 'today' | 'shop' | 'wallet'
 
 export function ChildApp() {
   const { data, session, setSession } = useStore()
-  const [tab, setTab] = useState<TabId>('today')
+  const [tab, setTab] = useState<TabId>('trail')
   if (!data || session?.role !== 'child') return <div className="loading">Carregando…</div>
   const me = data.children.find((c) => c.id === session.childId)
   if (!me) return <div className="loading">Não encontrei seu cadastro. Peça para seus pais conferirem.</div>
 
   const tabs: Tab<TabId>[] = [
-    { id: 'today', label: 'Hoje', icon: '⭐' },
+    { id: 'trail', label: 'Trilha', icon: '🗺️' },
+    { id: 'today', label: 'Hoje', icon: '⭐', badge: todoCount(data, me.id) },
     { id: 'shop', label: 'Prêmios', icon: '🎁' },
     { id: 'wallet', label: 'Meu cofre', icon: '🪙' },
   ]
@@ -38,7 +43,9 @@ export function ChildApp() {
           Sair
         </button>
       </header>
-      <main className="content">
+      <LevelWatcher childId={me.id} />
+      <main className="content" key={tab}>
+        {tab === 'trail' && <TrailPage childId={me.id} avatar={me.avatar} goToday={() => setTab('today')} />}
         {tab === 'today' && <Today childId={me.id} />}
         {tab === 'shop' && <Shop childId={me.id} />}
         {tab === 'wallet' && <Wallet childId={me.id} />}
@@ -63,7 +70,9 @@ function Today({ childId }: { childId: string }) {
     <div className="stack-lg">
       <div className="hero-balance">
         <span className="eyebrow">Meu saldo</span>
-        <div className="big-num">{bal} pts</div>
+        <div className="big-num">
+          <CountUp value={bal} /> pts
+        </div>
         <span>{formatMoney(bal * data.family.pointValueCents)}</span>
       </div>
       <div className="row-between">
@@ -91,6 +100,7 @@ function TaskItem({ task, state, childId }: { task: Task; state: 'todo' | 'pendi
   const { data, run } = useStore()
   const fileRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
+  const btnRef = useRef<HTMLButtonElement>(null)
   const lastNote = data?.executions
     .filter((e) => e.taskId === task.id && e.childId === childId && e.parentNote)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
@@ -102,12 +112,13 @@ function TaskItem({ task, state, childId }: { task: Task; state: 'todo' | 'pendi
       if (file) photo = await compressImage(file)
       await repo.submitExecution(task.id, childId, todayISO(), photo)
     }, 'Enviado! Agora é esperar a aprovação 🙌')
+    if (ok) burstFrom(btnRef.current)
     setBusy(false)
     if (!ok && fileRef.current) fileRef.current.value = ''
   }
 
   return (
-    <li className={`kid-task state-${state}`}>
+    <li className={`kid-task state-${state} pop-in`}>
       <div className="kid-task-main">
         <span className="kid-task-check" aria-hidden>
           {state === 'done' ? '✓' : state === 'pending' ? '⏳' : ''}
@@ -134,7 +145,7 @@ function TaskItem({ task, state, childId }: { task: Task; state: 'todo' | 'pendi
               if (f) void send(f)
             }}
           />
-          <button className="btn btn-coin full" disabled={busy} onClick={() => (task.requiresPhoto ? fileRef.current?.click() : void send(null))}>
+          <button ref={btnRef} className="btn btn-coin full" disabled={busy} onClick={() => (task.requiresPhoto ? fileRef.current?.click() : void send(null))}>
             {busy ? 'Enviando…' : task.requiresPhoto ? '📷 Tirar foto e enviar' : 'Fiz! Enviar'}
           </button>
         </>
@@ -215,7 +226,9 @@ function Shop({ childId }: { childId: string }) {
     <div className="stack-lg">
       <div className="hero-balance">
         <span className="eyebrow">Posso gastar</span>
-        <div className="big-num">{free} pts</div>
+        <div className="big-num">
+          <CountUp value={free} /> pts
+        </div>
         <span>Troque seus pontos por prêmios que a família combinou.</span>
       </div>
 
@@ -228,7 +241,7 @@ function Shop({ childId }: { childId: string }) {
           {rewards.map((r) => {
             const missing = r.costPoints - free
             return (
-              <li key={r.id} className={`shop-item ${missing > 0 ? 'is-locked' : ''}`}>
+              <li key={r.id} className={`shop-item pop-in ${missing > 0 ? 'is-locked' : ''}`}>
                 <span className="shop-icon" aria-hidden>
                   {r.icon}
                 </span>
@@ -245,9 +258,10 @@ function Shop({ childId }: { childId: string }) {
                   <button
                     className="btn btn-coin full"
                     disabled={busy === r.id}
-                    onClick={async () => {
+                    onClick={async (e) => {
+                      const el = e.currentTarget
                       setBusy(r.id)
-                      await run(() => repo.requestRedemption(r.id, childId), 'Pedido enviado! Seus pais vão entregar 🎉')
+                      if (await run(() => repo.requestRedemption(r.id, childId), 'Pedido enviado! Seus pais vão entregar 🎉')) burstFrom(el)
                       setBusy(null)
                     }}
                   >
@@ -285,4 +299,80 @@ function Shop({ childId }: { childId: string }) {
       )}
     </div>
   )
+}
+
+function todoCount(data: NonNullable<ReturnType<typeof useStore>['data']>, childId: string): number {
+  return data.tasks.filter((t) => {
+    const st = taskState(t, childId, data.executions)
+    return st === 'todo' || st === 'rejected'
+  }).length
+}
+
+function TrailPage({ childId, avatar, goToday }: { childId: string; avatar: string; goToday(): void }) {
+  const { data } = useStore()
+  if (!data) return null
+  const earned = totalEarned(data.ledger, childId)
+  const { level } = levelFor(earned)
+  const st = streak(data.executions, childId)
+  const todo = todoCount(data, childId)
+  return (
+    <div className="stack-lg">
+      <div className="trail-stats">
+        <div className={`stat ${st.days > 0 ? 'is-hot' : ''}`} title="Dias seguidos com tarefa">
+          <span className="stat-icon flame">🔥</span>
+          <b>
+            <CountUp value={st.days} />
+          </b>
+          <span className="muted small">{st.days === 1 ? 'dia' : 'dias'}</span>
+        </div>
+        <div className="stat" title="Pontos ganhos desde o começo">
+          <span className="stat-icon spin-slow">⭐</span>
+          <b>
+            <CountUp value={earned} />
+          </b>
+          <span className="muted small">pontos</span>
+        </div>
+        <div className="stat" title="Seu nível">
+          <span className="level-gem" style={{ background: level.color }} />
+          <b>{level.name}</b>
+          <span className="muted small">nível</span>
+        </div>
+      </div>
+      <TrailSummary earned={earned} />
+      {todo > 0 && (
+        <button className="alert wiggle" onClick={goToday}>
+          <span className="alert-num">{todo}</span>
+          <span>{st.doneToday ? 'tarefas ainda esperando você hoje' : 'Faça uma tarefa hoje para não perder sua sequência!'}</span>
+          <span aria-hidden>→</span>
+        </button>
+      )}
+      <Trail earned={earned} avatar={avatar} />
+    </div>
+  )
+}
+
+/** Comemora quando a criança chega numa estação nova desde a última vez que abriu o app. */
+function LevelWatcher({ childId }: { childId: string }) {
+  const { data } = useStore()
+  const earned = data ? totalEarned(data.ledger, childId) : 0
+  useEffect(() => {
+    if (!data) return
+    const key = `minha-mesada:estacao:${childId}`
+    const now = currentStation(earned)
+    let seen: number | null = null
+    try {
+      const raw = localStorage.getItem(key)
+      seen = raw == null ? null : Number(raw)
+      localStorage.setItem(key, String(now))
+    } catch {
+      return
+    }
+    // Na primeira vez só guarda, para não comemorar o que já tinha.
+    if (seen == null || now <= seen) return
+    const reached = STATIONS[now]
+    if (reached.kind === 'trophy') celebrate({ icon: '🏆', title: `Nível ${levelFor(reached.points).level.name}!`, subtitle: 'Você subiu de nível. Que orgulho!', big: true })
+    else if (reached.kind === 'chest') celebrate({ icon: '🎁', title: 'Baú surpresa aberto!', subtitle: reached.tip })
+    else celebrate({ icon: '⭐', title: 'Nova estação!', subtitle: reached.tip })
+  }, [data, childId, earned])
+  return null
 }

@@ -3,6 +3,8 @@ import { repo } from '../../data'
 import { useStore } from '../../app/store'
 import { Button, Empty, relativeDay } from '../../components/ui'
 import type { Execution } from '../../domain/types'
+import { burstFrom } from '../../components/motion'
+import { useRef } from 'react'
 
 const QUICK_NOTES = ['Mandou bem! 👏', 'Muito caprichado!', 'Obrigada pela ajuda ❤️']
 
@@ -58,11 +60,13 @@ function ReviewCard({ ex }: { ex: Execution }) {
   const { data, run } = useStore()
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState<null | 'yes' | 'no'>(null)
+  const yesRef = useRef<HTMLDivElement>(null)
   const task = data!.tasks.find((t) => t.id === ex.taskId)
   const child = data!.children.find((c) => c.id === ex.childId)
 
   const review = async (approve: boolean) => {
     setBusy(approve ? 'yes' : 'no')
+    if (approve) burstFrom(yesRef.current)
     await run(() => repo.reviewExecution(ex.id, approve, note), approve ? `+${task?.points ?? 0} pts para ${child?.name}` : 'Tarefa recusada')
     setBusy(null)
   }
@@ -88,7 +92,7 @@ function ReviewCard({ ex }: { ex: Execution }) {
             </button>
           ))}
         </div>
-        <div className="chip-row">
+        <div className="chip-row" ref={yesRef}>
           <Button busy={busy === 'yes'} disabled={!!busy} onClick={() => review(true)}>
             Aprovar
           </Button>

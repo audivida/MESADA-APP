@@ -2,6 +2,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { StoreProvider, useStore } from './app/store'
 import { Toasts } from './components/ui'
+import { CelebrationLayer } from './components/motion'
 import { Welcome } from './pages/Welcome'
 import { Onboarding } from './pages/Onboarding'
 import { ParentApp } from './pages/parent/ParentApp'
@@ -20,6 +21,7 @@ function App() {
     <>
       {screen}
       <Toasts />
+      <CelebrationLayer />
     </>
   )
 }

@@ -1,6 +1,7 @@
 import { useEffect, useId, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode } from 'react'
 import { formatMoney, levelFor } from '../domain/rules'
 import { useStore } from '../app/store'
+import { CountUp } from './motion'
 
 type Variant = 'primary' | 'ghost' | 'danger' | 'coin'
 
@@ -75,7 +76,10 @@ export function LevelProgress({ earned }: { earned: number }) {
 export function Points({ value, pointValueCents }: { value: number; pointValueCents: number }) {
   return (
     <span className="points">
-      <b>{value}</b> pts <span className="muted">· {formatMoney(value * pointValueCents)}</span>
+      <b>
+        <CountUp value={value} />
+      </b>{' '}
+      pts <span className="muted">· {formatMoney(value * pointValueCents)}</span>
     </span>
   )
 }
