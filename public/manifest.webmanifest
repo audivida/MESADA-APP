@@ -1,6 +1,6 @@
 {
   "name": "GoOnPlay",
-  "short_name": "Mesada",
+  "short_name": "GoOnPlay",
   "description": "Tarefas viram pontos, pontos viram mesada.",
   "start_url": "/",
   "display": "standalone",
