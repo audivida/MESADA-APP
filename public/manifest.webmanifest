@@ -1,0 +1,14 @@
+{
+  "name": "GoOnPlay",
+  "short_name": "GoOnPlay",
+  "description": "Tarefas viram pontos, pontos viram mesada.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FBF7EE",
+  "theme_color": "#16423C",
+  "lang": "pt-BR",
+  "categories": ["education", "finance", "lifestyle"],
+  "icons": [
+    { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
