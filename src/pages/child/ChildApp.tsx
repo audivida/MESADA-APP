@@ -4,10 +4,10 @@ import { useStore } from '../../app/store'
 import { compressImage } from '../../app/photo'
 import { Empty, LevelBadge, LevelProgress, TabBar, relativeDay, type Tab } from '../../components/ui'
 import { GoalCard, LedgerList } from '../../components/Ledger'
-import { balance, formatMoney, taskState, todayISO, totalEarned } from '../../domain/rules'
+import { available, balance, formatMoney, taskState, todayISO, totalEarned } from '../../domain/rules'
 import type { Task } from '../../domain/types'
 
-type TabId = 'today' | 'wallet'
+type TabId = 'today' | 'shop' | 'wallet'
 
 export function ChildApp() {
   const { data, session, setSession } = useStore()
@@ -18,6 +18,7 @@ export function ChildApp() {
 
   const tabs: Tab<TabId>[] = [
     { id: 'today', label: 'Hoje', icon: '⭐' },
+    { id: 'shop', label: 'Prêmios', icon: '🎁' },
     { id: 'wallet', label: 'Meu cofre', icon: '🪙' },
   ]
 
@@ -37,7 +38,11 @@ export function ChildApp() {
           Sair
         </button>
       </header>
-      <main className="content">{tab === 'today' ? <Today childId={me.id} /> : <Wallet childId={me.id} />}</main>
+      <main className="content">
+        {tab === 'today' && <Today childId={me.id} />}
+        {tab === 'shop' && <Shop childId={me.id} />}
+        {tab === 'wallet' && <Wallet childId={me.id} />}
+      </main>
       <TabBar<TabId> tabs={tabs} current={tab} onChange={setTab} />
     </div>
   )
@@ -190,6 +195,94 @@ function Wallet({ childId }: { childId: string }) {
         <h3>Extrato</h3>
         <LedgerList entries={data.ledger.filter((l) => l.childId === childId)} pointValueCents={data.family.pointValueCents} />
       </section>
+    </div>
+  )
+}
+
+function Shop({ childId }: { childId: string }) {
+  const { data, run } = useStore()
+  const [busy, setBusy] = useState<string | null>(null)
+  if (!data) return null
+  const free = available(data.ledger, data.redemptions, childId)
+  const rewards = data.rewards.filter((r) => r.active).sort((a, b) => a.costPoints - b.costPoints)
+  const mine = data.redemptions
+    .filter((r) => r.childId === childId)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, 6)
+  const label = { pending: 'Esperando entrega', delivered: 'Entregue', rejected: 'Recusado' }
+
+  return (
+    <div className="stack-lg">
+      <div className="hero-balance">
+        <span className="eyebrow">Posso gastar</span>
+        <div className="big-num">{free} pts</div>
+        <span>Troque seus pontos por prêmios que a família combinou.</span>
+      </div>
+
+      {rewards.length === 0 ? (
+        <Empty icon="🎁" title="Ainda não tem prêmios">
+          Peça para seus pais criarem a loja da família.
+        </Empty>
+      ) : (
+        <ul className="shop">
+          {rewards.map((r) => {
+            const missing = r.costPoints - free
+            return (
+              <li key={r.id} className={`shop-item ${missing > 0 ? 'is-locked' : ''}`}>
+                <span className="shop-icon" aria-hidden>
+                  {r.icon}
+                </span>
+                <b>{r.title}</b>
+                <span className="pts-chip">{r.costPoints} pts</span>
+                {missing > 0 ? (
+                  <>
+                    <div className="bar">
+                      <div className="bar-fill coin" style={{ width: `${Math.max(0, (free / r.costPoints) * 100)}%` }} />
+                    </div>
+                    <span className="muted small">Faltam {missing} pontos</span>
+                  </>
+                ) : (
+                  <button
+                    className="btn btn-coin full"
+                    disabled={busy === r.id}
+                    onClick={async () => {
+                      setBusy(r.id)
+                      await run(() => repo.requestRedemption(r.id, childId), 'Pedido enviado! Seus pais vão entregar 🎉')
+                      setBusy(null)
+                    }}
+                  >
+                    {busy === r.id ? 'Enviando…' : 'Quero esse!'}
+                  </button>
+                )}
+              </li>
+            )
+          })}
+        </ul>
+      )}
+
+      {mine.length > 0 && (
+        <section className="stack">
+          <h3>Meus pedidos</h3>
+          <ul className="ledger">
+            {mine.map((p) => {
+              const reward = data.rewards.find((r) => r.id === p.rewardId)
+              return (
+                <li key={p.id} className="ledger-row">
+                  <div>
+                    <span className="ledger-note">
+                      {reward?.icon} {reward?.title}
+                    </span>
+                    <span className="muted small">
+                      {p.costPoints} pts · {relativeDay(p.createdAt)}
+                    </span>
+                  </div>
+                  <span className={`pill ${p.status === 'delivered' ? 'pill-ok' : p.status === 'rejected' ? 'pill-no' : 'pill-wait'}`}>{label[p.status]}</span>
+                </li>
+              )
+            })}
+          </ul>
+        </section>
+      )}
     </div>
   )
 }

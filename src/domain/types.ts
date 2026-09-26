@@ -1,6 +1,6 @@
 export type Recurrence = 'once' | 'daily' | 'weekly'
 export type ExecutionStatus = 'pending' | 'approved' | 'rejected'
-export type LedgerKind = 'task' | 'goal' | 'bonus' | 'penalty' | 'payout'
+export type LedgerKind = 'task' | 'goal' | 'bonus' | 'penalty' | 'payout' | 'reward'
 
 export interface Family {
   id: string
@@ -79,4 +79,34 @@ export interface NewTask {
   weekdays: number[]
   childIds: string[]
   requiresPhoto: boolean
+}
+
+/** Prêmio que o filho pode trocar por pontos (tempo de tela, passeio...). */
+export interface Reward {
+  id: string
+  familyId: string
+  title: string
+  icon: string
+  costPoints: number
+  active: boolean
+}
+
+export type RedemptionStatus = 'pending' | 'delivered' | 'rejected'
+
+/** Pedido de troca: os pontos só saem quando os pais confirmam a entrega. */
+export interface Redemption {
+  id: string
+  rewardId: string
+  childId: string
+  familyId: string
+  costPoints: number
+  status: RedemptionStatus
+  createdAt: string
+  reviewedAt: string | null
+}
+
+export interface NewReward {
+  title: string
+  icon: string
+  costPoints: number
 }

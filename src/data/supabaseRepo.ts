@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import type { Child, Execution, Family, Goal, LedgerEntry, NewTask, Task } from '../domain/types'
+import type { Child, Execution, Family, Goal, LedgerEntry, NewReward, NewTask, Redemption, Reward, Task } from '../domain/types'
 import { AppError, type NewChild, type Repo, type Session, type Snapshot } from './repo'
 import { uid } from './localRepo'
 
@@ -13,6 +13,8 @@ const MESSAGES: Record<string, string> = {
   already_has_family: 'Sua conta já tem uma família.',
   forbidden: 'Você não tem permissão para fazer isso.',
   task_not_found: 'Tarefa não encontrada.',
+  not_enough_points: 'Você ainda não tem pontos suficientes para esse prêmio.',
+  reward_not_found: 'Esse prêmio não está mais disponível.',
   'Invalid login credentials': 'E-mail ou senha incorretos.',
   'User already registered': 'Já existe uma conta com esse e-mail.',
   'Email not confirmed': 'Confirme seu e-mail pelo link que enviamos e tente de novo.',
@@ -58,6 +60,18 @@ const toGoal = (r: any): Goal => ({
   targetPoints: r.target_points,
   bonusPoints: r.bonus_points,
   achievedAt: r.achieved_at,
+})
+
+const toReward = (r: any): Reward => ({ id: r.id, familyId: r.family_id, title: r.title, icon: r.icon, costPoints: r.cost_points, active: r.active })
+const toRedemption = (r: any): Redemption => ({
+  id: r.id,
+  rewardId: r.reward_id,
+  childId: r.child_id,
+  familyId: r.family_id,
+  costPoints: r.cost_points,
+  status: r.status,
+  createdAt: r.created_at,
+  reviewedAt: r.reviewed_at,
 })
 
 export class SupabaseRepo implements Repo {
@@ -127,15 +141,17 @@ export class SupabaseRepo implements Repo {
   }
 
   async load(): Promise<Snapshot> {
-    const [f, c, t, e, l, g] = await Promise.all([
+    const [f, c, t, e, l, g, rw, rd] = await Promise.all([
       this.sb.from('families').select('*').single(),
       this.sb.from('children').select('id, family_id, name, birthdate, avatar').order('created_at'),
       this.sb.from('tasks').select('*').order('created_at'),
       this.sb.from('executions').select('*').order('created_at', { ascending: false }).limit(500),
       this.sb.from('ledger').select('*').order('created_at', { ascending: false }),
       this.sb.from('goals').select('*').order('created_at'),
+      this.sb.from('rewards').select('*').order('cost_points'),
+      this.sb.from('redemptions').select('*').order('created_at', { ascending: false }).limit(200),
     ])
-    for (const r of [f, c, t, e, l, g]) fail(r.error)
+    for (const r of [f, c, t, e, l, g, rw, rd]) fail(r.error)
 
     // Fotos ficam num bucket privado: gera links temporários.
     const paths = (e.data ?? []).map((r: any) => r.photo_path).filter(Boolean) as string[]
@@ -164,6 +180,8 @@ export class SupabaseRepo implements Repo {
       executions,
       ledger: (l.data ?? []).map(toLedger),
       goals: (g.data ?? []).map(toGoal),
+      rewards: (rw.data ?? []).map(toReward),
+      redemptions: (rd.data ?? []).map(toRedemption),
     }
   }
 
@@ -249,5 +267,26 @@ export class SupabaseRepo implements Repo {
 
   async removeGoal(goalId: string): Promise<void> {
     fail((await this.sb.from('goals').delete().eq('id', goalId)).error)
+  }
+
+  async saveReward(reward: NewReward, id?: string): Promise<void> {
+    const row = { title: reward.title, icon: reward.icon || '🎁', cost_points: reward.costPoints }
+    if (id) fail((await this.sb.from('rewards').update(row).eq('id', id)).error)
+    else {
+      const s = await this.getSession()
+      fail((await this.sb.from('rewards').insert({ ...row, family_id: s!.familyId })).error)
+    }
+  }
+
+  async archiveReward(id: string): Promise<void> {
+    fail((await this.sb.from('rewards').update({ active: false }).eq('id', id)).error)
+  }
+
+  async requestRedemption(rewardId: string, childId: string): Promise<void> {
+    fail((await this.sb.rpc('request_redemption', { p_reward_id: rewardId, p_child_id: childId })).error)
+  }
+
+  async reviewRedemption(id: string, deliver: boolean): Promise<void> {
+    fail((await this.sb.rpc('review_redemption', { p_redemption_id: id, p_deliver: deliver })).error)
   }
 }

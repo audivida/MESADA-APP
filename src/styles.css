@@ -225,7 +225,7 @@ img { max-width: 100%; }
 .ledger-amt { display: grid; justify-items: end; font-variant-numeric: tabular-nums; }
 .kind-task .ledger-amt b, .kind-bonus .ledger-amt b, .kind-goal .ledger-amt b { color: var(--ok); }
 .kind-penalty .ledger-amt b { color: var(--warn); }
-.kind-payout .ledger-amt b { color: var(--muted); }
+.kind-payout .ledger-amt b, .kind-reward .ledger-amt b { color: var(--muted); }
 .goal { display: grid; gap: 8px; background: var(--surface); border-radius: 14px; padding: 14px 16px; box-shadow: var(--shadow); }
 .goal.is-done { background: var(--ok-soft); }
 .goal-head { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
@@ -283,3 +283,17 @@ img { max-width: 100%; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* Loja de prêmios */
+.pill-wait { background: color-mix(in srgb, var(--coin) 25%, transparent); color: var(--coin-deep); }
+.shop { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+.shop-item {
+  background: var(--surface); border-radius: 18px; padding: 16px 14px; box-shadow: var(--shadow);
+  display: grid; gap: 8px; justify-items: center; text-align: center; align-content: start;
+}
+.shop-icon { font-size: 2.4rem; line-height: 1; }
+.shop-item .bar { width: 100%; }
+.shop-item.is-locked .shop-icon { filter: grayscale(0.7); opacity: 0.7; }
+.task-row > div.kid-head:first-child { display: flex; }
+.hero-balance > * { position: relative; z-index: 1; max-width: 72%; }
+.shop-item .btn { padding: 11px 10px; white-space: nowrap; }

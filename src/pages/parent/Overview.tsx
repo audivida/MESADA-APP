@@ -4,12 +4,13 @@ import { Button, Empty, LevelBadge, LevelProgress, Points } from '../../componen
 import { balance, taskState, totalEarned } from '../../domain/rules'
 import { ChildSheet } from './ChildSheet'
 
-export function Overview({ goApprove, goFamily }: { goApprove(): void; goFamily(): void }) {
+export function Overview({ goApprove, goRewards, goFamily }: { goApprove(): void; goRewards(): void; goFamily(): void }) {
   const { data } = useStore()
   const [openChild, setOpenChild] = useState<string | null>(null)
   if (!data) return null
   const { children, executions, ledger, tasks, family } = data
   const pending = executions.filter((e) => e.status === 'pending')
+  const requests = data.redemptions.filter((r) => r.status === 'pending')
 
   return (
     <div className="stack-lg">
@@ -19,6 +20,14 @@ export function Overview({ goApprove, goFamily }: { goApprove(): void; goFamily(
         <button className="alert" onClick={goApprove}>
           <span className="alert-num">{pending.length}</span>
           <span>{pending.length === 1 ? 'tarefa esperando sua aprovação' : 'tarefas esperando sua aprovação'}</span>
+          <span aria-hidden>→</span>
+        </button>
+      )}
+
+      {requests.length > 0 && (
+        <button className="alert" onClick={goRewards}>
+          <span className="alert-num">{requests.length}</span>
+          <span>{requests.length === 1 ? 'prêmio pedido para entregar' : 'prêmios pedidos para entregar'}</span>
           <span aria-hidden>→</span>
         </button>
       )}

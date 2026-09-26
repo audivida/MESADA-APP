@@ -53,3 +53,38 @@ describe('fluxo completo no modo local', () => {
     expect(snap.executions.filter((e) => e.status === 'pending')).toHaveLength(2)
   })
 })
+
+describe('loja de prêmios', () => {
+  it('reserva o saldo no pedido e só desconta na entrega', async () => {
+    const repo = new LocalRepo(memory())
+    await repo.signUpParent('Grazi', 'g@exemplo.com', 'segredo1')
+    await repo.createFamily('Família G', 10)
+    await repo.addChild({ name: 'Lia', birthdate: null, avatar: '🦊', pin: '1234' })
+    let snap = await repo.load()
+    const lia = snap.children[0]
+    await repo.addLedger(lia.id, 50, 'bonus', 'Começo')
+    await repo.saveReward({ title: 'Tela extra', icon: '📱', costPoints: 30 })
+    await repo.saveReward({ title: 'Bicicleta', icon: '🚲', costPoints: 500 })
+    snap = await repo.load()
+    const tela = snap.rewards.find((r) => r.costPoints === 30)!
+    const bike = snap.rewards.find((r) => r.costPoints === 500)!
+
+    await repo.signOut()
+    await repo.signInChild(snap.family.code, '1234')
+    await expect(repo.saveReward({ title: 'x', icon: '', costPoints: 1 })).rejects.toThrow()
+    await expect(repo.requestRedemption(bike.id, lia.id)).rejects.toThrow('Faltam 450')
+    await repo.requestRedemption(tela.id, lia.id)
+    await expect(repo.requestRedemption(tela.id, lia.id)).rejects.toThrow('Faltam 10')
+    snap = await repo.load()
+    expect(balance(snap.ledger, lia.id)).toBe(50)
+    await expect(repo.reviewRedemption(snap.redemptions[0].id, true)).rejects.toThrow()
+
+    await repo.signOut()
+    await repo.signInParent('g@exemplo.com', 'segredo1')
+    await repo.reviewRedemption(snap.redemptions[0].id, true)
+    await expect(repo.reviewRedemption(snap.redemptions[0].id, true)).rejects.toThrow()
+    snap = await repo.load()
+    expect(balance(snap.ledger, lia.id)).toBe(20)
+    expect(snap.ledger.find((l) => l.kind === 'reward')?.note).toBe('Prêmio: Tela extra')
+  })
+})

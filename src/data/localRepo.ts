@@ -1,5 +1,5 @@
-import type { Child, Execution, Family, Goal, LedgerEntry, Task } from '../domain/types'
-import { todayISO } from '../domain/rules'
+import type { Child, Execution, Family, Goal, LedgerEntry, NewReward, Redemption, Reward, Task } from '../domain/types'
+import { available, todayISO } from '../domain/rules'
 import { AppError, type NewChild, type Repo, type Session, type Snapshot } from './repo'
 
 interface LocalParent {
@@ -17,6 +17,8 @@ interface LocalDB {
   executions: Execution[]
   ledger: LedgerEntry[]
   goals: Goal[]
+  rewards: Reward[]
+  redemptions: Redemption[]
   session: (Session & { email?: string }) | null
 }
 
@@ -30,6 +32,8 @@ const empty = (): LocalDB => ({
   executions: [],
   ledger: [],
   goals: [],
+  rewards: [],
+  redemptions: [],
   session: null,
 })
 
@@ -203,6 +207,8 @@ export class LocalRepo implements Repo {
       executions: db.executions.filter((e) => e.familyId === fid),
       ledger: db.ledger.filter((l) => l.familyId === fid),
       goals: db.goals.filter((g) => g.familyId === fid),
+      rewards: db.rewards.filter((r) => r.familyId === fid),
+      redemptions: db.redemptions.filter((r) => r.familyId === fid),
     }
   }
 
@@ -224,6 +230,7 @@ export class LocalRepo implements Repo {
       db.executions = db.executions.filter((e) => e.childId !== childId)
       db.ledger = db.ledger.filter((l) => l.childId !== childId)
       db.goals = db.goals.filter((g) => g.childId !== childId)
+      db.redemptions = db.redemptions.filter((r) => r.childId !== childId)
     })
   }
 
@@ -343,11 +350,70 @@ export class LocalRepo implements Repo {
     })
   }
 
+  async saveReward(reward: NewReward, id?: string): Promise<void> {
+    if (!reward.title.trim()) throw new AppError('Dê um nome para o prêmio.')
+    if (!(reward.costPoints > 0)) throw new AppError('O prêmio precisa custar pelo menos 1 ponto.')
+    this.mutate((db) => {
+      this.requireParent(db)
+      const fid = this.familyId(db)
+      const existing = id && db.rewards.find((r) => r.id === id && r.familyId === fid)
+      const clean = { title: reward.title.trim(), icon: reward.icon || '🎁', costPoints: reward.costPoints }
+      if (existing) Object.assign(existing, clean)
+      else db.rewards.push({ ...clean, id: uid(), familyId: fid, active: true })
+    })
+  }
+
+  async archiveReward(id: string): Promise<void> {
+    this.mutate((db) => {
+      this.requireParent(db)
+      const r = db.rewards.find((x) => x.id === id && x.familyId === this.familyId(db))
+      if (r) r.active = false
+    })
+  }
+
+  async requestRedemption(rewardId: string, childId: string): Promise<void> {
+    this.mutate((db) => {
+      const fid = this.familyId(db)
+      if (db.session?.role === 'child' && db.session.childId !== childId) throw new AppError('Você só pode pedir prêmios para você.')
+      const reward = db.rewards.find((r) => r.id === rewardId && r.familyId === fid && r.active)
+      if (!reward) throw new AppError('Esse prêmio não está mais disponível.')
+      const free = available(db.ledger, db.redemptions, childId)
+      if (free < reward.costPoints) throw new AppError(`Faltam ${reward.costPoints - free} pontos para esse prêmio.`)
+      db.redemptions.push({ id: uid(), rewardId, childId, familyId: fid, costPoints: reward.costPoints, status: 'pending', createdAt: new Date().toISOString(), reviewedAt: null })
+    })
+  }
+
+  async reviewRedemption(id: string, deliver: boolean): Promise<void> {
+    this.mutate((db) => {
+      this.requireParent(db)
+      const r = db.redemptions.find((x) => x.id === id && x.familyId === this.familyId(db))
+      if (!r || r.status !== 'pending') throw new AppError('Esse pedido já foi respondido.')
+      r.status = deliver ? 'delivered' : 'rejected'
+      r.reviewedAt = new Date().toISOString()
+      if (deliver) {
+        const reward = db.rewards.find((x) => x.id === r.rewardId)
+        db.ledger.push({ id: uid(), childId: r.childId, familyId: r.familyId, points: -r.costPoints, kind: 'reward', refId: r.id, note: `Prêmio: ${reward?.title ?? ''}`, createdAt: r.reviewedAt })
+      }
+    })
+  }
+
   /** Cria uma família de exemplo e entra como responsável. */
   async startDemo(): Promise<Session> {
     const db = this.read()
     const existing = db.families.find((f) => f.code === 'DEMO42')
-    if (!existing) seedDemo(db)
+    // Demonstração criada por uma versão antiga (sem prêmios): recomeça do zero.
+    if (existing && !db.rewards.some((r) => r.familyId === existing.id)) {
+      const gone = (x: { familyId: string }) => x.familyId !== existing.id
+      db.families = db.families.filter((f) => f.id !== existing.id)
+      db.parents = db.parents.filter((p) => p.familyId !== existing.id)
+      db.children = db.children.filter(gone)
+      db.tasks = db.tasks.filter(gone)
+      db.executions = db.executions.filter(gone)
+      db.ledger = db.ledger.filter(gone)
+      db.goals = db.goals.filter(gone)
+      db.redemptions = db.redemptions.filter(gone)
+    }
+    if (!db.families.some((f) => f.code === 'DEMO42')) seedDemo(db)
     db.session = { role: 'parent', familyId: db.families.find((f) => f.code === 'DEMO42')!.id, name: 'Responsável (demo)', email: 'demo@exemplo.com' }
     this.write(db)
     return db.session
@@ -415,6 +481,11 @@ function seedDemo(db: LocalDB) {
     { id: uid(), taskId: tCama.id, childId: lia.id, familyId: fid, forDate: today, photoUrl: photoPlaceholder('Cama arrumada 🛏️', '#5C8D89'), status: 'pending', parentNote: null, createdAt: now.toISOString(), reviewedAt: null },
     { id: uid(), taskId: tLouca.id, childId: theo.id, familyId: fid, forDate: today, photoUrl: photoPlaceholder('Louça lavada 🍽️', '#C47F3D'), status: 'pending', parentNote: null, createdAt: now.toISOString(), reviewedAt: null },
   )
+  const rTela = { id: uid(), familyId: fid, title: '30 minutos a mais de tela', icon: '📱', costPoints: 40, active: true }
+  const rJantar = { id: uid(), familyId: fid, title: 'Escolher o jantar de sexta', icon: '🍕', costPoints: 60, active: true }
+  const rPasseio = { id: uid(), familyId: fid, title: 'Passeio no parque com a família', icon: '🌳', costPoints: 150, active: true }
+  db.rewards.push(rTela, rJantar, rPasseio)
+  db.redemptions.push({ id: uid(), rewardId: rTela.id, childId: theo.id, familyId: fid, costPoints: rTela.costPoints, status: 'pending', createdAt: now.toISOString(), reviewedAt: null })
   db.goals.push(
     { id: uid(), childId: lia.id, familyId: fid, title: 'Kit de pintura', targetPoints: 400, bonusPoints: 20, achievedAt: null },
     { id: uid(), childId: theo.id, familyId: fid, title: 'Fone de ouvido', targetPoints: 800, bonusPoints: 40, achievedAt: null },

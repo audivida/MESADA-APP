@@ -16,11 +16,13 @@ O nome é provisório. Troque em `src/app/brand.ts`, `index.html` e `public/mani
 - Bônus, desconto de pontos e registro de mesada paga.
 - Metas (ex.: “bicicleta nova”) com bônus ao conquistar.
 - Extrato completo de cada filho.
+- Loja de prêmios: cadastre prêmios (ou use as ideias prontas) e entregue os pedidos dos filhos. Os pontos só saem quando você confirma a entrega.
 
 **Filho ou filha**
 - Entra com o código da família e o PIN.
 - Vê as tarefas de hoje, tira a foto e envia.
 - Acompanha saldo, nível, metas, recados dos pais e extrato.
+- Troca pontos por prêmios da loja da família e acompanha os pedidos.
 
 **App**
 - Funciona no navegador e pode ser instalado na tela do celular (PWA).
@@ -38,7 +40,7 @@ Sem configurar nada, o app roda em **modo local**: os dados ficam no navegador. 
 ## Ligar o servidor (Supabase)
 
 1. Crie um projeto grátis em [supabase.com](https://supabase.com).
-2. No painel do projeto, abra **SQL Editor**, cole o conteúdo de `supabase/migrations/0001_init.sql` e rode.
+2. No painel do projeto, abra **SQL Editor** e rode, em ordem, cada arquivo de `supabase/migrations/` (`0001_init.sql`, depois `0002_rewards.sql`).
 3. Em **Authentication → Sign In / Providers**, deixe **Email** ligado e ligue **Allow anonymous sign-ins** (é assim que o filho entra só com código e PIN).
 4. Copie `.env.example` para `.env` e preencha `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` (ficam em **Project Settings → API**).
 5. Rode `npm run dev` de novo.
@@ -67,6 +69,7 @@ O saldo nunca é um número solto: cada ganho ou gasto é uma linha no extrato, 
 
 - Cada família só enxerga os próprios dados (Row Level Security no Supabase).
 - Filhos não criam tarefas, não aprovam e não lançam pontos. Pontos só entram pela aprovação dos pais.
+- Um pedido de prêmio reserva os pontos, então o filho não gasta o mesmo saldo duas vezes.
 - O PIN é guardado com hash e nunca é lido pelo app.
 - Fotos ficam num armazenamento privado, com links temporários.
 
@@ -81,7 +84,6 @@ npm test                     # regras e fluxo completo no modo local
 
 - Notificações push (“tarefa enviada”, “tarefa aprovada”).
 - Cofrinhos gastar / poupar / doar.
-- Loja de recompensas (trocar pontos por tempo de tela, passeio etc.).
 - Segundo responsável na mesma família.
 - Relatório semanal por e-mail.
 - Assinatura (Asaas ou lojas).

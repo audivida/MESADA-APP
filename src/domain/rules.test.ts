@@ -52,3 +52,10 @@ describe('tarefa do dia', () => {
 })
 
 it('idade', () => expect(ageFrom('2017-09-27', sat)).toBe(8))
+
+it('saldo livre desconta pedidos de prêmio abertos', async () => {
+  const { available } = await import('./rules')
+  const ledger = [entry(100)]
+  const red = (status: 'pending' | 'delivered' | 'rejected') => ({ id: status, rewardId: 'r', childId: 'c1', familyId: 'f', costPoints: 30, status, createdAt: '', reviewedAt: null })
+  expect(available(ledger, [red('pending'), red('rejected'), red('delivered')], 'c1')).toBe(70)
+})

@@ -1,4 +1,4 @@
-import type { Child, Execution, LedgerEntry, Task } from './types'
+import type { Child, Execution, LedgerEntry, Redemption, Task } from './types'
 
 export interface Level {
   id: 'bronze' | 'prata' | 'ouro' | 'diamante'
@@ -19,9 +19,15 @@ export function balance(entries: LedgerEntry[], childId: string): number {
   return entries.filter((e) => e.childId === childId).reduce((s, e) => s + e.points, 0)
 }
 
+/** Saldo que ainda pode ser gasto: desconta pedidos de prêmio esperando entrega. */
+export function available(entries: LedgerEntry[], redemptions: Redemption[], childId: string): number {
+  const held = redemptions.filter((r) => r.childId === childId && r.status === 'pending').reduce((s, r) => s + r.costPoints, 0)
+  return balance(entries, childId) - held
+}
+
 export function totalEarned(entries: LedgerEntry[], childId: string): number {
   return entries
-    .filter((e) => e.childId === childId && e.points > 0 && e.kind !== 'payout')
+    .filter((e) => e.childId === childId && e.points > 0)
     .reduce((s, e) => s + e.points, 0)
 }
 
