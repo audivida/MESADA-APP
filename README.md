@@ -33,7 +33,7 @@ Para trocar o nome, edite `src/app/brand.ts`, `index.html` e `public/manifest.we
 
 **App**
 - Funciona no navegador e pode ser instalado na tela do celular (PWA).
-- Área do filho com visual de jogo (inspirado em jogos como Brawl Stars): noite estrelada, cores vibrantes, contornos grossos, botões 3D e fonte Lilita One. A área dos pais segue clara e calma, com tema claro e escuro automáticos.
+- App inteiro com visual de jogo (inspirado em jogos como Brawl Stars), na área dos pais e na do filho: noite estrelada, cores vibrantes, contornos grossos, botões 3D e fonte Lilita One.
 - Movimento em tudo: telas entrando, listas em cascata, botões que afundam no toque, números que sobem, barras que enchem e confete. Quem ativa “reduzir movimento” no celular vê o app parado.
 
 ## Rodar no computador

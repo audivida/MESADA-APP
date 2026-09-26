@@ -662,3 +662,39 @@ body:has(.kid-theme) { background: #16225e; }
   .feat-box .btn-feat { animation: none; }
   .praise-note { transform: none !important; }
 }
+
+/* ============ Área dos pais no mesmo visual de jogo ============ */
+.kid-theme .kid-card, .kid-theme .task-row, .kid-theme .review, .kid-theme .feat-card {
+  background: linear-gradient(180deg, var(--panel) 0%, var(--panel-2) 100%);
+  border: 3px solid var(--ink-line); border-radius: 16px; box-shadow: 0 5px 0 var(--ink-line); color: #fff;
+}
+.kid-theme .kid-card:hover, .kid-theme .task-row:not(.static):hover, .kid-theme .alert:hover { box-shadow: 0 8px 0 var(--ink-line); }
+.kid-theme .kid-card b, .kid-theme .task-row b { font-family: var(--game-font); font-weight: 400; font-size: 1.1rem; letter-spacing: 0.01em; }
+.kid-theme .card.inset { background: rgba(11, 18, 54, 0.45); box-shadow: none; border: 2px solid var(--ink-line); }
+.kid-theme .avatar { background: var(--night); border: 3px solid var(--ink-line); }
+.kid-theme .level { color: #fff; border: 2px solid var(--ink-line); background: color-mix(in srgb, var(--lvl) 55%, var(--night)); }
+.kid-theme .chip { background: var(--panel-2); color: #fff; border: 2.5px solid var(--ink-line); box-shadow: 0 3px 0 var(--ink-line); }
+.kid-theme .chip.is-on { background: var(--sun); color: var(--ink-line); border-color: var(--ink-line); }
+.kid-theme .chip:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--ink-line); }
+.kid-theme .quick-chip.bonus b { color: var(--lime); }
+.kid-theme .quick-chip.penalty b { color: #ff9b85; }
+.kid-theme .note-input { background: #fff; color: var(--ink-line); border: 3px solid var(--ink-line); }
+.kid-theme .field-label { color: #fff; }
+.kid-theme .field-hint { color: var(--muted); }
+.kid-theme .suggest-cta { background: rgba(255, 210, 31, 0.15); border: 2.5px dashed var(--sun); color: var(--sun); }
+.kid-theme .review-nophoto { background: var(--night); color: var(--muted); }
+.kid-theme .review-photo { border-bottom: 3px solid var(--ink-line); }
+.kid-theme .sheet-backdrop { background: rgba(5, 8, 30, 0.7); }
+.kid-theme .sheet {
+  background: linear-gradient(180deg, var(--night-2) 0%, var(--night) 40%, #16225e 100%);
+  border: 3px solid var(--ink-line); border-bottom: 0; color: #fff;
+}
+.kid-theme .sheet-head h2 { font-family: var(--game-font); font-weight: 400; color: var(--sun); -webkit-text-stroke: 1.5px var(--ink-line); paint-order: stroke fill; text-shadow: 0 3px 0 var(--ink-line); }
+.kid-theme .sheet-head button { color: #fff; }
+.kid-theme .code { color: var(--sun); -webkit-text-stroke: 1.5px var(--ink-line); paint-order: stroke fill; text-shadow: 0 3px 0 var(--ink-line); }
+.kid-theme .ledger-amt .muted { color: var(--muted); }
+.kid-theme .kind-penalty .ledger-amt b, .kid-theme .kind-payout .ledger-amt b, .kid-theme .kind-reward .ledger-amt b { color: #ff9b85; }
+.kid-theme .btn-danger { background: linear-gradient(180deg, #ff8a70, var(--warn)); color: #fff; }
+.kid-theme .link.danger { color: #ff9b85; }
+.kid-theme .praise-card .praise-msg { color: #ffd1ea; }
+.kid-theme .empty { color: #fff; }

@@ -28,7 +28,7 @@ export function ParentApp() {
   ]
 
   return (
-    <div className="shell">
+    <div className="shell kid-theme">
       <header className="topbar">
         <span className="eyebrow">{data.family.name}</span>
       </header>
