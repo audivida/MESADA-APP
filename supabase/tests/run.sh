@@ -8,4 +8,5 @@ $P -d mesada_test -f supabase/tests/stub_supabase.sql
 for f in supabase/migrations/*.sql; do $P -d mesada_test -f "$f"; done
 $P -d mesada_test -f supabase/tests/flow_test.sql
 $P -d mesada_test -f supabase/tests/rewards_test.sql
+$P -d mesada_test -f supabase/tests/familia_test.sql
 echo "Todos os testes do banco passaram."

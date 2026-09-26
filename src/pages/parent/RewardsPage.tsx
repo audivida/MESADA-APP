@@ -3,8 +3,13 @@ import { repo } from '../../data'
 import { useStore } from '../../app/store'
 import { REWARD_ICONS, REWARD_IDEAS } from '../../app/brand'
 import { Button, Empty, Field, Sheet, relativeDay } from '../../components/ui'
-import { available, formatMoney } from '../../domain/rules'
-import type { NewReward, Redemption } from '../../domain/types'
+import { available, formatMoney, LIMIT_LABEL } from '../../domain/rules'
+import type { LimitPeriod, NewReward, Redemption } from '../../domain/types'
+
+const noLimit = { limitCount: null, limitPeriod: null }
+
+export const limitText = (r: { limitCount: number | null; limitPeriod: LimitPeriod | null }) =>
+  r.limitCount && r.limitPeriod ? `${r.limitCount} por ${LIMIT_LABEL[r.limitPeriod]}` : null
 
 export function RewardsPage() {
   const { data, run } = useStore()
@@ -18,7 +23,7 @@ export function RewardsPage() {
     <div className="stack-lg">
       <div className="row-between">
         <h1 className="page-title">Prêmios</h1>
-        <Button onClick={() => setEditing({ reward: { title: '', icon: '🎁', costPoints: 50 } })}>+ Novo</Button>
+        <Button onClick={() => setEditing({ reward: { title: '', icon: '🎁', costPoints: 50, ...noLimit } })}>+ Novo</Button>
       </div>
 
       {pending.length > 0 && (
@@ -41,12 +46,15 @@ export function RewardsPage() {
           <ul className="task-list">
             {rewards.map((r) => (
               <li key={r.id}>
-                <button className="task-row" onClick={() => setEditing({ id: r.id, reward: { title: r.title, icon: r.icon, costPoints: r.costPoints } })}>
+                <button className="task-row" onClick={() => setEditing({ id: r.id, reward: { title: r.title, icon: r.icon, costPoints: r.costPoints, limitCount: r.limitCount, limitPeriod: r.limitPeriod } })}>
                   <div className="kid-head">
                     <span className="avatar">{r.icon}</span>
                     <div>
                       <b>{r.title}</b>
-                      <span className="muted small">≈ {formatMoney(r.costPoints * data.family.pointValueCents)}</span>
+                      <span className="muted small">
+                        ≈ {formatMoney(r.costPoints * data.family.pointValueCents)}
+                        {limitText(r) ? ` · ${limitText(r)}` : ''}
+                      </span>
                     </div>
                   </div>
                   <span className="pts-chip">{r.costPoints}</span>
@@ -62,7 +70,7 @@ export function RewardsPage() {
           <h3>Ideias</h3>
           <div className="chip-row">
             {ideas.map((i) => (
-              <button key={i.title} className="chip" onClick={() => void run(() => repo.saveReward(i), 'Prêmio adicionado')}>
+              <button key={i.title} className="chip" onClick={() => void run(() => repo.saveReward({ ...noLimit, ...i }), 'Prêmio adicionado')}>
                 + {i.icon} {i.title} · {i.costPoints}
               </button>
             ))}
@@ -148,6 +156,30 @@ function RewardForm({ initial, id, onClose }: { initial: NewReward; id?: string;
           onChange={(e) => setR({ ...r, costPoints: Number(e.target.value) })}
           hint={`Equivale a ${formatMoney(r.costPoints * cents)} de mesada.`}
         />
+        <fieldset className="fieldset">
+          <legend className="field-label">Limite de pedidos</legend>
+          <div className="chip-row">
+            <button type="button" className={`chip ${!r.limitPeriod ? 'is-on' : ''}`} onClick={() => setR({ ...r, ...noLimit })}>
+              Sem limite
+            </button>
+            {(Object.keys(LIMIT_LABEL) as LimitPeriod[]).map((p) => (
+              <button type="button" key={p} className={`chip ${r.limitPeriod === p ? 'is-on' : ''}`} onClick={() => setR({ ...r, limitPeriod: p, limitCount: r.limitCount ?? 1 })}>
+                Por {LIMIT_LABEL[p]}
+              </button>
+            ))}
+          </div>
+          {r.limitPeriod && (
+            <Field
+              label={`Quantas vezes por ${LIMIT_LABEL[r.limitPeriod]}`}
+              type="number"
+              min={1}
+              max={50}
+              required
+              value={r.limitCount ?? 1}
+              onChange={(e) => setR({ ...r, limitCount: Math.max(1, Number(e.target.value) || 1) })}
+            />
+          )}
+        </fieldset>
         {data && data.children.length > 0 && (
           <p className="muted small">
             Saldo livre hoje: {data.children.map((c) => `${c.name} ${available(data.ledger, data.redemptions, c.id)} pts`).join(' · ')}

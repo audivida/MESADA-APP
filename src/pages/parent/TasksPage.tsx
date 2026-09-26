@@ -3,12 +3,26 @@ import { repo } from '../../data'
 import { useStore } from '../../app/store'
 import { Button, Empty, Field, Sheet } from '../../components/ui'
 import { AGE_BANDS, bandForAge } from '../../domain/suggestions'
-import { ageFrom, WEEKDAYS } from '../../domain/rules'
-import type { NewTask, Recurrence, Task } from '../../domain/types'
+import { ageFrom, CATEGORIES, WEEKDAYS } from '../../domain/rules'
+import type { NewTask, Recurrence, Task, TaskCategory } from '../../domain/types'
 
-const RECURRENCE: Record<Recurrence, string> = { daily: 'Todo dia', weekly: 'Dias da semana', once: 'Uma vez só' }
+const RECURRENCE: Record<Recurrence, string> = { daily: 'Todo dia', weekly: 'Dias da semana', monthly: 'Todo mês', once: 'Uma vez só' }
 
-const blank = (): NewTask => ({ title: '', description: '', points: 10, recurrence: 'daily', weekdays: [], childIds: [], requiresPhoto: true })
+const when = (t: Task) =>
+  t.recurrence === 'weekly' ? t.weekdays.map((d) => WEEKDAYS[d]).join(', ') : t.recurrence === 'monthly' ? `Todo dia ${t.monthDay}` : RECURRENCE[t.recurrence]
+
+const blank = (): NewTask => ({
+  title: '',
+  description: '',
+  points: 10,
+  recurrence: 'daily',
+  weekdays: [],
+  childIds: [],
+  requiresPhoto: true,
+  category: null,
+  helpUrl: null,
+  monthDay: null,
+})
 
 export function TasksPage() {
   const { data } = useStore()
@@ -39,10 +53,14 @@ export function TasksPage() {
             <li key={t.id}>
               <button className="task-row" onClick={() => setEditing({ id: t.id, task: { ...t } })}>
                 <div>
-                  <b>{t.title}</b>
+                  <b>
+                    {t.category && <span className="cat-dot" style={{ background: CATEGORIES[t.category].color }} aria-label={CATEGORIES[t.category].label} />}
+                    {t.title}
+                  </b>
                   <span className="muted small">
-                    {t.recurrence === 'weekly' ? t.weekdays.map((d) => WEEKDAYS[d]).join(', ') : RECURRENCE[t.recurrence]} · {names(t)}
+                    {when(t)} · {names(t)}
                     {t.requiresPhoto ? ' · 📷' : ''}
+                    {t.helpUrl ? ' · 🎬' : ''}
                   </span>
                 </div>
                 <span className="pts-chip">{t.points}</span>
@@ -94,11 +112,23 @@ function TaskForm({ initial, id, onClose }: { initial: NewTask; id?: string; onC
           <legend className="field-label">Quando</legend>
           <div className="chip-row">
             {(Object.keys(RECURRENCE) as Recurrence[]).map((r) => (
-              <button type="button" key={r} className={`chip ${t.recurrence === r ? 'is-on' : ''}`} onClick={() => set('recurrence', r)}>
+              <button type="button" key={r} className={`chip ${t.recurrence === r ? 'is-on' : ''}`} onClick={() => setT((x) => ({ ...x, recurrence: r, monthDay: r === 'monthly' ? x.monthDay ?? new Date().getDate() : x.monthDay }))}>
                 {RECURRENCE[r]}
               </button>
             ))}
           </div>
+          {t.recurrence === 'monthly' && (
+            <Field
+              label="A partir de que dia do mês"
+              type="number"
+              min={1}
+              max={31}
+              required
+              value={t.monthDay ?? ''}
+              onChange={(e) => set('monthDay', e.target.value ? Number(e.target.value) : null)}
+              hint="A tarefa aparece nesse dia e fica disponível até o fim do mês."
+            />
+          )}
           {t.recurrence === 'weekly' && (
             <div className="chip-row">
               {WEEKDAYS.map((d, i) => (
@@ -123,6 +153,29 @@ function TaskForm({ initial, id, onClose }: { initial: NewTask; id?: string; onC
             ))}
           </div>
         </fieldset>
+
+        <fieldset className="fieldset">
+          <legend className="field-label">Categoria</legend>
+          <div className="chip-row">
+            <button type="button" className={`chip ${t.category === null ? 'is-on' : ''}`} onClick={() => set('category', null)}>
+              Nenhuma
+            </button>
+            {(Object.keys(CATEGORIES) as TaskCategory[]).map((c) => (
+              <button type="button" key={c} className={`chip ${t.category === c ? 'is-on' : ''}`} onClick={() => set('category', c)}>
+                <span className="cat-dot" style={{ background: CATEGORIES[c].color }} /> {CATEGORIES[c].label}
+              </button>
+            ))}
+          </div>
+        </fieldset>
+
+        <Field
+          label="Vídeo ou link de ajuda (opcional)"
+          type="url"
+          placeholder="https://..."
+          value={t.helpUrl ?? ''}
+          onChange={(e) => set('helpUrl', e.target.value.trim() || null)}
+          hint="A criança vê um botão “Como fazer” na tarefa."
+        />
 
         <label className="check">
           <input type="checkbox" checked={t.requiresPhoto} onChange={(e) => set('requiresPhoto', e.target.checked)} />

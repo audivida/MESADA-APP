@@ -4,7 +4,8 @@ import { useStore } from '../../app/store'
 import { compressImage } from '../../app/photo'
 import { Empty, LevelBadge, LevelProgress, TabBar, relativeDay, type Tab } from '../../components/ui'
 import { GoalCard, LedgerList } from '../../components/Ledger'
-import { available, balance, formatMoney, taskState, todayISO, totalEarned } from '../../domain/rules'
+import { available, balance, CATEGORIES, formatMoney, LIMIT_LABEL, redemptionsLeft, THIS_PERIOD, taskState, todayISO, totalEarned } from '../../domain/rules'
+import { PRAISE_IDEAS } from '../../app/brand'
 import type { Task } from '../../domain/types'
 import { Trail, TrailSummary } from '../../components/Trail'
 import { CountUp, burstFrom, celebrate } from '../../components/motion'
@@ -92,7 +93,87 @@ function Today({ childId }: { childId: string }) {
           ))}
         </ul>
       )}
+      <FeatBox childId={childId} />
     </div>
+  )
+}
+
+/** Façanha: a criança conta algo bom que fez sem ninguém pedir. */
+function FeatBox({ childId }: { childId: string }) {
+  const { data, run } = useStore()
+  const [open, setOpen] = useState(false)
+  const [title, setTitle] = useState('')
+  const [file, setFile] = useState<File | null>(null)
+  const [busy, setBusy] = useState(false)
+  const btnRef = useRef<HTMLButtonElement>(null)
+  if (!data) return null
+  const mine = data.feats
+    .filter((f) => f.childId === childId)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, 4)
+  const label = { pending: 'Esperando', approved: 'Valeu!', rejected: 'Não contou' }
+
+  return (
+    <section className="stack feat-box pop-in">
+      {!open ? (
+        <button className="btn btn-feat full" onClick={() => setOpen(true)}>
+          ⭐ Fiz uma façanha!
+        </button>
+      ) : (
+        <form
+          className="stack card"
+          onSubmit={async (e) => {
+            e.preventDefault()
+            setBusy(true)
+            const ok = await run(async () => {
+              const photo = file ? await compressImage(file) : null
+              await repo.submitFeat(childId, title, photo)
+            }, 'Façanha enviada! Seus pais vão ver ⭐')
+            setBusy(false)
+            if (ok) {
+              burstFrom(btnRef.current)
+              setTitle('')
+              setFile(null)
+              setOpen(false)
+            }
+          }}
+        >
+          <h3>O que você fez de legal?</h3>
+          <p className="muted small">Algo bom que ninguém pediu: ajudar alguém, arrumar sem mandarem, cuidar de um bichinho…</p>
+          <input className="note-input" required maxLength={120} placeholder="Ex.: lavei a louça sem ninguém pedir" value={title} onChange={(e) => setTitle(e.target.value)} aria-label="Sua façanha" />
+          <label className="chip file-chip">
+            📷 {file ? 'Foto escolhida' : 'Juntar uma foto (opcional)'}
+            <input type="file" accept="image/*" capture="environment" hidden onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+          </label>
+          <div className="chip-row">
+            <button ref={btnRef} className="btn btn-coin" disabled={busy}>
+              {busy ? 'Enviando…' : 'Enviar façanha'}
+            </button>
+            <button type="button" className="link muted" onClick={() => setOpen(false)}>
+              Cancelar
+            </button>
+          </div>
+        </form>
+      )}
+      {mine.length > 0 && (
+        <ul className="ledger">
+          {mine.map((f) => (
+            <li key={f.id} className="ledger-row">
+              <div>
+                <span className="ledger-note">⭐ {f.title}</span>
+                <span className="muted small">
+                  {relativeDay(f.createdAt)}
+                  {f.parentNote ? ` · 💬 “${f.parentNote}”` : ''}
+                </span>
+              </div>
+              <span className={`pill ${f.status === 'approved' ? 'pill-ok' : f.status === 'rejected' ? 'pill-no' : 'pill-wait'}`}>
+                {f.status === 'approved' ? `+${f.points}` : label[f.status]}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   )
 }
 
@@ -124,8 +205,16 @@ function TaskItem({ task, state, childId }: { task: Task; state: 'todo' | 'pendi
           {state === 'done' ? '✓' : state === 'pending' ? '⏳' : ''}
         </span>
         <div>
-          <b>{task.title}</b>
+          <b>
+            {task.category && <span className="cat-dot" style={{ background: CATEGORIES[task.category].color }} aria-label={CATEGORIES[task.category].label} />}
+            {task.title}
+          </b>
           {task.description && <span className="muted small">{task.description}</span>}
+          {task.helpUrl && (
+            <a className="help-link small" href={task.helpUrl} target="_blank" rel="noopener noreferrer">
+              🎬 Como fazer
+            </a>
+          )}
           {state === 'pending' && <span className="small status-text">Esperando aprovação</span>}
           {state === 'rejected' && <span className="small status-text warn">Precisa refazer{lastNote?.parentNote ? `: “${lastNote.parentNote}”` : ''}</span>}
           {state === 'done' && lastNote?.parentNote && <span className="small status-text ok">💬 “{lastNote.parentNote}”</span>}
@@ -186,6 +275,8 @@ function Wallet({ childId }: { childId: string }) {
         {goals.length === 0 ? <p className="muted small">Converse com seus pais sobre algo que você quer conquistar.</p> : goals.map((g) => <GoalCard key={g.id} goal={g} current={bal} />)}
       </section>
 
+      <PraiseWall childId={childId} />
+
       {notes.length > 0 && (
         <section className="stack">
           <h3>Recados</h3>
@@ -207,6 +298,80 @@ function Wallet({ childId }: { childId: string }) {
         <LedgerList entries={data.ledger.filter((l) => l.childId === childId)} pointValueCents={data.family.pointValueCents} />
       </section>
     </div>
+  )
+}
+
+/** Mural de elogios recebidos e envio de elogio para um irmão. */
+function PraiseWall({ childId }: { childId: string }) {
+  const { data, run } = useStore()
+  const [to, setTo] = useState<string | null>(null)
+  const [msg, setMsg] = useState('')
+  const [busy, setBusy] = useState(false)
+  if (!data) return null
+  const received = data.praises
+    .filter((p) => p.childId === childId && p.status === 'approved')
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, 6)
+  const siblings = data.children.filter((c) => c.id !== childId)
+
+  return (
+    <section className="stack">
+      <h3>💌 Mural de elogios</h3>
+      {received.length === 0 ? (
+        <p className="muted small">Quando alguém da família te elogiar, aparece aqui.</p>
+      ) : (
+        <ul className="praise-wall">
+          {received.map((p) => (
+            <li key={p.id} className="praise-note pop-in">
+              <span className="praise-msg">“{p.message}”</span>
+              <span className="muted small">
+                {p.fromName} · {relativeDay(p.createdAt)}
+                {p.points > 0 ? ` · +${p.points} pts` : ''}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {siblings.length > 0 && (
+        <div className="stack card">
+          <b>Elogiar alguém</b>
+          <div className="chip-row">
+            {siblings.map((c) => (
+              <button key={c.id} type="button" className={`chip ${to === c.id ? 'is-on' : ''}`} onClick={() => setTo(c.id)}>
+                {c.avatar} {c.name}
+              </button>
+            ))}
+          </div>
+          {to && (
+            <form
+              className="stack"
+              onSubmit={async (e) => {
+                e.preventDefault()
+                setBusy(true)
+                const ok = await run(() => repo.sendPraise(to, msg, 0), 'Elogio enviado! Seus pais vão entregar 💌')
+                setBusy(false)
+                if (ok) {
+                  setMsg('')
+                  setTo(null)
+                }
+              }}
+            >
+              <input className="note-input" required maxLength={200} placeholder="Escreva o elogio" value={msg} onChange={(e) => setMsg(e.target.value)} aria-label="Elogio" />
+              <div className="chip-row">
+                {PRAISE_IDEAS.map((q) => (
+                  <button key={q} type="button" className="chip" onClick={() => setMsg(q)}>
+                    {q}
+                  </button>
+                ))}
+              </div>
+              <button className="btn btn-coin" disabled={busy}>
+                {busy ? 'Enviando…' : 'Enviar elogio'}
+              </button>
+            </form>
+          )}
+        </div>
+      )}
+    </section>
   )
 }
 
@@ -240,14 +405,22 @@ function Shop({ childId }: { childId: string }) {
         <ul className="shop">
           {rewards.map((r) => {
             const missing = r.costPoints - free
+            const left = redemptionsLeft(r, data.redemptions, childId)
             return (
-              <li key={r.id} className={`shop-item pop-in ${missing > 0 ? 'is-locked' : ''}`}>
+              <li key={r.id} className={`shop-item pop-in ${missing > 0 || left === 0 ? 'is-locked' : ''}`}>
                 <span className="shop-icon" aria-hidden>
                   {r.icon}
                 </span>
                 <b>{r.title}</b>
                 <span className="pts-chip">{r.costPoints} pts</span>
-                {missing > 0 ? (
+                {r.limitCount && r.limitPeriod && (
+                  <span className="muted small limit-tag">
+                    {r.limitCount}× por {LIMIT_LABEL[r.limitPeriod]}
+                  </span>
+                )}
+                {left === 0 ? (
+                  <span className="muted small">Já pediu {THIS_PERIOD[r.limitPeriod!]}. Volta logo! ⏳</span>
+                ) : missing > 0 ? (
                   <>
                     <div className="bar">
                       <div className="bar-fill coin" style={{ width: `${Math.max(0, (free / r.costPoints) * 100)}%` }} />

@@ -1,6 +1,8 @@
-export type Recurrence = 'once' | 'daily' | 'weekly'
+export type Recurrence = 'once' | 'daily' | 'weekly' | 'monthly'
 export type ExecutionStatus = 'pending' | 'approved' | 'rejected'
-export type LedgerKind = 'task' | 'goal' | 'bonus' | 'penalty' | 'payout' | 'reward'
+export type LedgerKind = 'task' | 'goal' | 'bonus' | 'penalty' | 'payout' | 'reward' | 'feat' | 'praise'
+export type TaskCategory = 'casa' | 'estudos' | 'saude' | 'cuidados'
+export type LimitPeriod = 'week' | 'month' | 'year'
 
 export interface Family {
   id: string
@@ -31,6 +33,11 @@ export interface Task {
   /** Filhos que fazem a tarefa. Vazio = todos. */
   childIds: string[]
   requiresPhoto: boolean
+  category: TaskCategory | null
+  /** Link de vídeo ou página que ensina a fazer a tarefa. */
+  helpUrl: string | null
+  /** Dia do mês para tarefas mensais (a partir desse dia, até o fim do mês). */
+  monthDay: number | null
   active: boolean
   createdAt: string
 }
@@ -79,6 +86,9 @@ export interface NewTask {
   weekdays: number[]
   childIds: string[]
   requiresPhoto: boolean
+  category: TaskCategory | null
+  helpUrl: string | null
+  monthDay: number | null
 }
 
 /** Prêmio que o filho pode trocar por pontos (tempo de tela, passeio...). */
@@ -88,6 +98,9 @@ export interface Reward {
   title: string
   icon: string
   costPoints: number
+  /** Ex.: 1 por semana. Nulo = sem limite. */
+  limitCount: number | null
+  limitPeriod: LimitPeriod | null
   active: boolean
 }
 
@@ -109,4 +122,36 @@ export interface NewReward {
   title: string
   icon: string
   costPoints: number
+  limitCount: number | null
+  limitPeriod: LimitPeriod | null
+}
+
+export type ReviewStatus = 'pending' | 'approved' | 'rejected'
+
+/** Façanha: algo bom que a criança fez sem ninguém pedir. Os pais aprovam e escolhem os pontos. */
+export interface Feat {
+  id: string
+  childId: string
+  familyId: string
+  title: string
+  photoUrl: string | null
+  status: ReviewStatus
+  points: number
+  parentNote: string | null
+  createdAt: string
+  reviewedAt: string | null
+}
+
+/** Elogio para um filho. Dos pais já vale; de irmão espera os pais aprovarem. */
+export interface Praise {
+  id: string
+  familyId: string
+  childId: string
+  fromChildId: string | null
+  fromName: string
+  message: string
+  points: number
+  status: ReviewStatus
+  createdAt: string
+  reviewedAt: string | null
 }

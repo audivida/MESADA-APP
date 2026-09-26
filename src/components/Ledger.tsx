@@ -9,6 +9,8 @@ const KIND_LABEL: Record<LedgerEntry['kind'], string> = {
   penalty: 'Desconto',
   payout: 'Mesada paga',
   reward: 'Prêmio',
+  feat: 'Façanha',
+  praise: 'Elogio',
 }
 
 export function LedgerList({ entries, pointValueCents, limit = 30 }: { entries: LedgerEntry[]; pointValueCents: number; limit?: number }) {

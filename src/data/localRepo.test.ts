@@ -16,7 +16,7 @@ describe('fluxo completo no modo local', () => {
     await repo.createFamily('Família G', 10)
     await repo.addChild({ name: 'Lia', birthdate: '2017-03-12', avatar: '🦊', pin: '1234' })
     await expect(repo.addChild({ name: 'Bia', birthdate: null, avatar: '🐼', pin: '1234' })).rejects.toThrow('PIN')
-    await repo.saveTask({ title: 'Ler', description: '', points: 10, recurrence: 'daily', weekdays: [], childIds: [], requiresPhoto: false })
+    await repo.saveTask({ title: 'Ler', description: '', points: 10, recurrence: 'daily', weekdays: [], childIds: [], requiresPhoto: false, category: null, helpUrl: null, monthDay: null })
     let snap = await repo.load()
     const lia = snap.children[0]
     expect(lia).not.toHaveProperty('pin')
@@ -25,7 +25,7 @@ describe('fluxo completo no modo local', () => {
     await repo.signOut()
     await expect(repo.signInChild(code, '9999')).rejects.toThrow()
     await repo.signInChild(code.toLowerCase(), '1234')
-    await expect(repo.saveTask({ title: 'x', description: '', points: 99, recurrence: 'daily', weekdays: [], childIds: [], requiresPhoto: false })).rejects.toThrow()
+    await expect(repo.saveTask({ title: 'x', description: '', points: 99, recurrence: 'daily', weekdays: [], childIds: [], requiresPhoto: false, category: null, helpUrl: null, monthDay: null })).rejects.toThrow()
     await repo.submitExecution(snap.tasks[0].id, lia.id, '2026-09-26', null)
     await expect(repo.submitExecution(snap.tasks[0].id, lia.id, '2026-09-26', null)).rejects.toThrow('já foi enviada')
     snap = await repo.load()
@@ -63,15 +63,15 @@ describe('loja de prêmios', () => {
     let snap = await repo.load()
     const lia = snap.children[0]
     await repo.addLedger(lia.id, 50, 'bonus', 'Começo')
-    await repo.saveReward({ title: 'Tela extra', icon: '📱', costPoints: 30 })
-    await repo.saveReward({ title: 'Bicicleta', icon: '🚲', costPoints: 500 })
+    await repo.saveReward({ title: 'Tela extra', icon: '📱', costPoints: 30, limitCount: null, limitPeriod: null })
+    await repo.saveReward({ title: 'Bicicleta', icon: '🚲', costPoints: 500, limitCount: null, limitPeriod: null })
     snap = await repo.load()
     const tela = snap.rewards.find((r) => r.costPoints === 30)!
     const bike = snap.rewards.find((r) => r.costPoints === 500)!
 
     await repo.signOut()
     await repo.signInChild(snap.family.code, '1234')
-    await expect(repo.saveReward({ title: 'x', icon: '', costPoints: 1 })).rejects.toThrow()
+    await expect(repo.saveReward({ title: 'x', icon: '', costPoints: 1, limitCount: null, limitPeriod: null })).rejects.toThrow()
     await expect(repo.requestRedemption(bike.id, lia.id)).rejects.toThrow('Faltam 450')
     await repo.requestRedemption(tela.id, lia.id)
     await expect(repo.requestRedemption(tela.id, lia.id)).rejects.toThrow('Faltam 10')
@@ -86,5 +86,44 @@ describe('loja de prêmios', () => {
     snap = await repo.load()
     expect(balance(snap.ledger, lia.id)).toBe(20)
     expect(snap.ledger.find((l) => l.kind === 'reward')?.note).toBe('Prêmio: Tela extra')
+  })
+
+  it('façanhas, elogios e limite de prêmio', async () => {
+    const repo = new LocalRepo(memory())
+    await repo.signUpParent('Grazi', 'f@exemplo.com', 'segredo1')
+    await repo.createFamily('Família F', 10)
+    await repo.addChild({ name: 'Lia', birthdate: null, avatar: '🦊', pin: '1234' })
+    await repo.addChild({ name: 'Theo', birthdate: null, avatar: '🐢', pin: '4321' })
+    await repo.saveReward({ title: 'Açaí', icon: '🍧', costPoints: 5, limitCount: 1, limitPeriod: 'week' })
+    let snap = await repo.load()
+    const [lia, theo] = snap.children
+    await repo.addLedger(lia.id, 50, 'bonus', 'Começo')
+
+    await repo.signOut()
+    await repo.signInChild(snap.family.code, '1234')
+    await repo.submitFeat(lia.id, 'Lavei a louça sem ninguém pedir', null)
+    await expect(repo.submitFeat(theo.id, 'x', null)).rejects.toThrow()
+    await repo.sendPraise(theo.id, 'Me ajudou no dever', 500)
+    await expect(repo.sendPraise(lia.id, 'Eu sou demais', 0)).rejects.toThrow()
+    await expect(repo.reviewFeat((await repo.load()).feats[0].id, true, 99, '')).rejects.toThrow()
+    const acai = snap.rewards[0]
+    await repo.requestRedemption(acai.id, lia.id)
+    await expect(repo.requestRedemption(acai.id, lia.id)).rejects.toThrow('nesta semana')
+
+    await repo.signOut()
+    await repo.signInParent('f@exemplo.com', 'segredo1')
+    snap = await repo.load()
+    expect(snap.praises[0]).toMatchObject({ status: 'pending', points: 0, fromName: 'Lia' })
+    await expect(repo.reviewFeat(snap.feats[0].id, true, 0, '')).rejects.toThrow('pontos')
+    await repo.reviewFeat(snap.feats[0].id, true, 15, 'Que orgulho!')
+    await repo.reviewPraise(snap.praises[0].id, true, 5)
+    await repo.sendPraise(lia.id, 'Obrigada pelas plantas', 3)
+    await repo.reviewRedemption(snap.redemptions[0].id, false)
+    snap = await repo.load()
+    expect(balance(snap.ledger, lia.id)).toBe(50 + 15 + 3)
+    expect(balance(snap.ledger, theo.id)).toBe(5)
+    expect(snap.ledger.filter((l) => l.kind === 'praise')).toHaveLength(2)
+    // Pedido recusado não conta no limite.
+    await repo.requestRedemption(snap.rewards[0].id, lia.id)
   })
 })

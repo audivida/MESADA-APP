@@ -13,7 +13,10 @@ export function ParentApp() {
   const { data } = useStore()
   const [tab, setTab] = useState<TabId>('home')
   if (!data) return <div className="loading">Carregando…</div>
-  const pending = data.executions.filter((e) => e.status === 'pending').length
+  const pending =
+    data.executions.filter((e) => e.status === 'pending').length +
+    data.feats.filter((f) => f.status === 'pending').length +
+    data.praises.filter((p) => p.status === 'pending').length
   const requests = data.redemptions.filter((r) => r.status === 'pending').length
 
   const tabs: Tab<TabId>[] = [

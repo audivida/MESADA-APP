@@ -1,5 +1,5 @@
-import type { Child, Execution, Family, Goal, LedgerEntry, NewReward, Redemption, Reward, Task } from '../domain/types'
-import { available, todayISO } from '../domain/rules'
+import type { Child, Execution, Family, Feat, Goal, LedgerEntry, NewReward, Praise, Redemption, Reward, Task } from '../domain/types'
+import { available, redemptionsLeft, todayISO, THIS_PERIOD } from '../domain/rules'
 import { AppError, type NewChild, type Repo, type Session, type Snapshot } from './repo'
 
 interface LocalParent {
@@ -19,6 +19,8 @@ interface LocalDB {
   goals: Goal[]
   rewards: Reward[]
   redemptions: Redemption[]
+  feats: Feat[]
+  praises: Praise[]
   session: (Session & { email?: string }) | null
 }
 
@@ -34,6 +36,8 @@ const empty = (): LocalDB => ({
   goals: [],
   rewards: [],
   redemptions: [],
+  feats: [],
+  praises: [],
   session: null,
 })
 
@@ -203,12 +207,15 @@ export class LocalRepo implements Repo {
       family,
       // O PIN nunca sai daqui.
       children: db.children.filter((c) => c.familyId === fid).map(({ pin: _pin, ...c }) => c),
-      tasks: db.tasks.filter((t) => t.familyId === fid),
+      // Dados gravados por versões antigas não têm os campos novos.
+      tasks: db.tasks.filter((t) => t.familyId === fid).map((t) => ({ ...t, category: t.category ?? null, helpUrl: t.helpUrl ?? null, monthDay: t.monthDay ?? null })),
       executions: db.executions.filter((e) => e.familyId === fid),
       ledger: db.ledger.filter((l) => l.familyId === fid),
       goals: db.goals.filter((g) => g.familyId === fid),
-      rewards: db.rewards.filter((r) => r.familyId === fid),
+      rewards: db.rewards.filter((r) => r.familyId === fid).map((r) => ({ ...r, limitCount: r.limitCount ?? null, limitPeriod: r.limitPeriod ?? null })),
       redemptions: db.redemptions.filter((r) => r.familyId === fid),
+      feats: db.feats.filter((f) => f.familyId === fid),
+      praises: db.praises.filter((p) => p.familyId === fid),
     }
   }
 
@@ -231,6 +238,8 @@ export class LocalRepo implements Repo {
       db.ledger = db.ledger.filter((l) => l.childId !== childId)
       db.goals = db.goals.filter((g) => g.childId !== childId)
       db.redemptions = db.redemptions.filter((r) => r.childId !== childId)
+      db.feats = db.feats.filter((f) => f.childId !== childId)
+      db.praises = db.praises.filter((p) => p.childId !== childId)
     })
   }
 
@@ -238,6 +247,8 @@ export class LocalRepo implements Repo {
     if (!task.title.trim()) throw new AppError('Dê um nome para a tarefa.')
     if (!(task.points > 0)) throw new AppError('A tarefa precisa valer pelo menos 1 ponto.')
     if (task.recurrence === 'weekly' && task.weekdays.length === 0) throw new AppError('Escolha pelo menos um dia da semana.')
+    if (task.recurrence === 'monthly' && !(task.monthDay && task.monthDay >= 1 && task.monthDay <= 31)) throw new AppError('Escolha o dia do mês.')
+    if (task.helpUrl && !/^https?:\/\//.test(task.helpUrl)) throw new AppError('O link de ajuda precisa começar com http:// ou https://')
     this.mutate((db) => {
       this.requireParent(db)
       const fid = this.familyId(db)
@@ -357,7 +368,14 @@ export class LocalRepo implements Repo {
       this.requireParent(db)
       const fid = this.familyId(db)
       const existing = id && db.rewards.find((r) => r.id === id && r.familyId === fid)
-      const clean = { title: reward.title.trim(), icon: reward.icon || '🎁', costPoints: reward.costPoints }
+      const limited = reward.limitCount && reward.limitCount > 0 && reward.limitPeriod
+      const clean = {
+        title: reward.title.trim(),
+        icon: reward.icon || '🎁',
+        costPoints: reward.costPoints,
+        limitCount: limited ? reward.limitCount : null,
+        limitPeriod: limited ? reward.limitPeriod : null,
+      }
       if (existing) Object.assign(existing, clean)
       else db.rewards.push({ ...clean, id: uid(), familyId: fid, active: true })
     })
@@ -377,6 +395,8 @@ export class LocalRepo implements Repo {
       if (db.session?.role === 'child' && db.session.childId !== childId) throw new AppError('Você só pode pedir prêmios para você.')
       const reward = db.rewards.find((r) => r.id === rewardId && r.familyId === fid && r.active)
       if (!reward) throw new AppError('Esse prêmio não está mais disponível.')
+      if (redemptionsLeft(reward, db.redemptions, childId) === 0)
+        throw new AppError(`Você já pediu esse prêmio ${reward.limitCount === 1 ? 'uma vez' : `${reward.limitCount} vezes`} ${THIS_PERIOD[reward.limitPeriod!]}. Espere a próxima!`)
       const free = available(db.ledger, db.redemptions, childId)
       if (free < reward.costPoints) throw new AppError(`Faltam ${reward.costPoints - free} pontos para esse prêmio.`)
       db.redemptions.push({ id: uid(), rewardId, childId, familyId: fid, costPoints: reward.costPoints, status: 'pending', createdAt: new Date().toISOString(), reviewedAt: null })
@@ -397,12 +417,73 @@ export class LocalRepo implements Repo {
     })
   }
 
+  async submitFeat(childId: string, title: string, photo: Blob | null): Promise<void> {
+    if (!title.trim()) throw new AppError('Conte o que você fez.')
+    const photoUrl = photo ? await blobToDataUrl(photo) : null
+    this.mutate((db) => {
+      const fid = this.familyId(db)
+      if (db.session?.role === 'child' && db.session.childId !== childId) throw new AppError('Você só pode contar as suas façanhas.')
+      if (db.feats.filter((f) => f.childId === childId && f.status === 'pending').length >= 5)
+        throw new AppError('Você já tem 5 façanhas esperando. Espere os seus pais olharem.')
+      db.feats.push({ id: uid(), childId, familyId: fid, title: title.trim().slice(0, 120), photoUrl, status: 'pending', points: 0, parentNote: null, createdAt: new Date().toISOString(), reviewedAt: null })
+    })
+  }
+
+  async reviewFeat(id: string, approve: boolean, points: number, note: string): Promise<void> {
+    if (approve && !(points > 0)) throw new AppError('Escolha quantos pontos a façanha vale.')
+    this.mutate((db) => {
+      this.requireParent(db)
+      const f = db.feats.find((x) => x.id === id && x.familyId === this.familyId(db))
+      if (!f || f.status !== 'pending') throw new AppError('Essa façanha já foi avaliada.')
+      f.status = approve ? 'approved' : 'rejected'
+      f.points = approve ? points : 0
+      f.parentNote = note.trim() || null
+      f.reviewedAt = new Date().toISOString()
+      if (approve)
+        db.ledger.push({ id: uid(), childId: f.childId, familyId: f.familyId, points, kind: 'feat', refId: f.id, note: `Façanha: ${f.title}`, createdAt: f.reviewedAt })
+    })
+  }
+
+  async sendPraise(childId: string, message: string, points: number): Promise<void> {
+    if (!message.trim()) throw new AppError('Escreva o elogio.')
+    this.mutate((db) => {
+      const fid = this.familyId(db)
+      const s = db.session!
+      if (!db.children.some((c) => c.id === childId && c.familyId === fid)) throw new AppError('Filho não encontrado.')
+      const now = new Date().toISOString()
+      const base = { id: uid(), familyId: fid, childId, message: message.trim().slice(0, 200), createdAt: now }
+      if (s.role === 'parent') {
+        const pts = Math.max(0, Math.floor(points) || 0)
+        const fromName = s.name || 'Responsável'
+        db.praises.push({ ...base, fromChildId: null, fromName, points: pts, status: 'approved', reviewedAt: now })
+        if (pts > 0) db.ledger.push({ id: uid(), childId, familyId: fid, points: pts, kind: 'praise', refId: base.id, note: `Elogio de ${fromName}`, createdAt: now })
+      } else {
+        if (s.childId === childId) throw new AppError('Elogie outra pessoa da família. 😉')
+        const me = db.children.find((c) => c.id === s.childId)
+        db.praises.push({ ...base, fromChildId: s.childId, fromName: me?.name ?? 'Irmão', points: 0, status: 'pending', reviewedAt: null })
+      }
+    })
+  }
+
+  async reviewPraise(id: string, approve: boolean, points: number): Promise<void> {
+    this.mutate((db) => {
+      this.requireParent(db)
+      const p = db.praises.find((x) => x.id === id && x.familyId === this.familyId(db))
+      if (!p || p.status !== 'pending') throw new AppError('Esse elogio já foi avaliado.')
+      const pts = approve ? Math.max(0, Math.floor(points) || 0) : 0
+      p.status = approve ? 'approved' : 'rejected'
+      p.points = pts
+      p.reviewedAt = new Date().toISOString()
+      if (pts > 0) db.ledger.push({ id: uid(), childId: p.childId, familyId: p.familyId, points: pts, kind: 'praise', refId: p.id, note: `Elogio de ${p.fromName}`, createdAt: p.reviewedAt })
+    })
+  }
+
   /** Cria uma família de exemplo e entra como responsável. */
   async startDemo(): Promise<Session> {
     const db = this.read()
     const existing = db.families.find((f) => f.code === 'DEMO42')
-    // Demonstração criada por uma versão antiga (sem prêmios): recomeça do zero.
-    if (existing && !db.rewards.some((r) => r.familyId === existing.id)) {
+    // Demonstração criada por uma versão antiga (sem elogios): recomeça do zero.
+    if (existing && !db.praises.some((p) => p.familyId === existing.id)) {
       const gone = (x: { familyId: string }) => x.familyId !== existing.id
       db.families = db.families.filter((f) => f.id !== existing.id)
       db.parents = db.parents.filter((p) => p.familyId !== existing.id)
@@ -412,6 +493,7 @@ export class LocalRepo implements Repo {
       db.ledger = db.ledger.filter(gone)
       db.goals = db.goals.filter(gone)
       db.redemptions = db.redemptions.filter(gone)
+      db.rewards = db.rewards.filter(gone)
     }
     if (!db.families.some((f) => f.code === 'DEMO42')) seedDemo(db)
     db.session = { role: 'parent', familyId: db.families.find((f) => f.code === 'DEMO42')!.id, name: 'Responsável (demo)', email: 'demo@exemplo.com' }
@@ -439,7 +521,15 @@ function seedDemo(db: LocalDB) {
   const lia = { id: uid(), familyId: fid, name: 'Lia', birthdate: `${now.getFullYear() - 9}-03-12`, avatar: '🦊', pin: '1234' }
   const theo = { id: uid(), familyId: fid, name: 'Theo', birthdate: `${now.getFullYear() - 13}-07-02`, avatar: '🐢', pin: '4321' }
   db.children.push(lia, theo)
-  const mk = (title: string, points: number, recurrence: Task['recurrence'], childIds: string[], weekdays: number[] = [], requiresPhoto = true): Task => ({
+  const mk = (
+    title: string,
+    points: number,
+    recurrence: Task['recurrence'],
+    childIds: string[],
+    weekdays: number[] = [],
+    requiresPhoto = true,
+    category: Task['category'] = 'casa',
+  ): Task => ({
     id: uid(),
     familyId: fid,
     title,
@@ -449,16 +539,23 @@ function seedDemo(db: LocalDB) {
     weekdays,
     childIds,
     requiresPhoto,
+    category,
+    helpUrl: null,
+    monthDay: null,
     active: true,
     createdAt: daysAgo(20).toISOString(),
   })
   const tCama = mk('Arrumar a cama', 5, 'daily', [])
-  const tMochila = mk('Arrumar a mochila para a escola', 5, 'daily', [lia.id])
+  const tMochila = mk('Arrumar a mochila para a escola', 5, 'daily', [lia.id], [], true, 'estudos')
   const tLouca = mk('Lavar a louça do jantar', 15, 'daily', [theo.id])
-  const tLeitura = mk('Ler 15 minutos', 10, 'daily', [lia.id], [], false)
+  const tLeitura = mk('Ler 15 minutos', 10, 'daily', [lia.id], [], false, 'estudos')
   const tQuarto = mk('Organizar o quarto', 20, 'weekly', [], [6])
   const tLixo = mk('Separar o lixo reciclável', 10, 'weekly', [theo.id], [2, 5])
-  db.tasks.push(tCama, tMochila, tLouca, tLeitura, tQuarto, tLixo)
+  const tDentes = mk('Escovar os dentes depois do almoço', 5, 'daily', [], [], false, 'cuidados')
+  tDentes.helpUrl = 'https://www.youtube.com/results?search_query=como+escovar+os+dentes+crian%C3%A7as'
+  const tArmario = mk('Organizar o armário', 40, 'monthly', [])
+  tArmario.monthDay = 1
+  db.tasks.push(tCama, tMochila, tLouca, tLeitura, tQuarto, tLixo, tDentes, tArmario)
 
   // Histórico aprovado nos últimos dias.
   const history: [Task, typeof lia, number][] = []
@@ -484,8 +581,18 @@ function seedDemo(db: LocalDB) {
   const rTela = { id: uid(), familyId: fid, title: '30 minutos a mais de tela', icon: '📱', costPoints: 40, active: true }
   const rJantar = { id: uid(), familyId: fid, title: 'Escolher o jantar de sexta', icon: '🍕', costPoints: 60, active: true }
   const rPasseio = { id: uid(), familyId: fid, title: 'Passeio no parque com a família', icon: '🌳', costPoints: 150, active: true }
-  db.rewards.push(rTela, rJantar, rPasseio)
+  const rAcai = { id: uid(), familyId: fid, title: 'Açaí', icon: '🍧', costPoints: 30, limitCount: 1, limitPeriod: 'week' as const, active: true }
+  const rViagem = { id: uid(), familyId: fid, title: 'Viagem em família', icon: '✈️', costPoints: 1400, limitCount: 2, limitPeriod: 'year' as const, active: true }
+  const noLimit = { limitCount: null, limitPeriod: null }
+  db.rewards.push({ ...rTela, ...noLimit }, { ...rJantar, ...noLimit }, { ...rPasseio, ...noLimit }, rAcai, rViagem)
   db.redemptions.push({ id: uid(), rewardId: rTela.id, childId: theo.id, familyId: fid, costPoints: rTela.costPoints, status: 'pending', createdAt: now.toISOString(), reviewedAt: null })
+  // Uma façanha e um elogio de irmão esperando os pais, e um elogio já aprovado.
+  db.feats.push({ id: uid(), childId: lia.id, familyId: fid, title: 'Reguei as plantas sem ninguém pedir', photoUrl: photoPlaceholder('Plantas regadas 🌱', '#3F8F5A'), status: 'pending', points: 0, parentNote: null, createdAt: now.toISOString(), reviewedAt: null })
+  db.praises.push(
+    { id: uid(), familyId: fid, childId: lia.id, fromChildId: theo.id, fromName: 'Theo', message: 'Me emprestou os lápis de cor', points: 0, status: 'pending', createdAt: now.toISOString(), reviewedAt: null },
+    { id: uid(), familyId: fid, childId: theo.id, fromChildId: null, fromName: 'Mãe', message: 'Obrigada por cuidar da sua irmã', points: 20, status: 'approved', createdAt: daysAgo(2).toISOString(), reviewedAt: daysAgo(2).toISOString() },
+  )
+  db.ledger.push({ id: uid(), childId: theo.id, familyId: fid, points: 20, kind: 'praise', refId: null, note: 'Elogio de Mãe', createdAt: daysAgo(2).toISOString() })
   db.goals.push(
     { id: uid(), childId: lia.id, familyId: fid, title: 'Kit de pintura', targetPoints: 400, bonusPoints: 20, achievedAt: null },
     { id: uid(), childId: theo.id, familyId: fid, title: 'Fone de ouvido', targetPoints: 800, bonusPoints: 40, achievedAt: null },

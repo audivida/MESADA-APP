@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import type { Child, Execution, Family, Goal, LedgerEntry, NewReward, NewTask, Redemption, Reward, Task } from '../domain/types'
+import type { Child, Execution, Family, Feat, Goal, LedgerEntry, NewReward, NewTask, Praise, Redemption, Reward, Task } from '../domain/types'
 import { AppError, type NewChild, type Repo, type Session, type Snapshot } from './repo'
 import { uid } from './localRepo'
 
@@ -15,6 +15,10 @@ const MESSAGES: Record<string, string> = {
   task_not_found: 'Tarefa não encontrada.',
   not_enough_points: 'Você ainda não tem pontos suficientes para esse prêmio.',
   reward_not_found: 'Esse prêmio não está mais disponível.',
+  limit_reached: 'Você já pediu esse prêmio o máximo de vezes neste período. Espere o próximo!',
+  too_many_feats: 'Você já tem 5 façanhas esperando. Espere os seus pais olharem.',
+  self_praise: 'Elogie outra pessoa da família. 😉',
+  points_required: 'Escolha quantos pontos a façanha vale.',
   'Invalid login credentials': 'E-mail ou senha incorretos.',
   'User already registered': 'Já existe uma conta com esse e-mail.',
   'Email not confirmed': 'Confirme seu e-mail pelo link que enviamos e tente de novo.',
@@ -39,6 +43,9 @@ const toTask = (r: any): Task => ({
   weekdays: r.weekdays ?? [],
   childIds: r.child_ids ?? [],
   requiresPhoto: r.requires_photo,
+  category: r.category ?? null,
+  helpUrl: r.help_url ?? null,
+  monthDay: r.month_day ?? null,
   active: r.active,
   createdAt: r.created_at,
 })
@@ -62,7 +69,28 @@ const toGoal = (r: any): Goal => ({
   achievedAt: r.achieved_at,
 })
 
-const toReward = (r: any): Reward => ({ id: r.id, familyId: r.family_id, title: r.title, icon: r.icon, costPoints: r.cost_points, active: r.active })
+const toReward = (r: any): Reward => ({
+  id: r.id,
+  familyId: r.family_id,
+  title: r.title,
+  icon: r.icon,
+  costPoints: r.cost_points,
+  limitCount: r.limit_count ?? null,
+  limitPeriod: r.limit_period ?? null,
+  active: r.active,
+})
+const toPraise = (r: any): Praise => ({
+  id: r.id,
+  familyId: r.family_id,
+  childId: r.child_id,
+  fromChildId: r.from_child_id,
+  fromName: r.from_name,
+  message: r.message,
+  points: r.points,
+  status: r.status,
+  createdAt: r.created_at,
+  reviewedAt: r.reviewed_at,
+})
 const toRedemption = (r: any): Redemption => ({
   id: r.id,
   rewardId: r.reward_id,
@@ -141,7 +169,7 @@ export class SupabaseRepo implements Repo {
   }
 
   async load(): Promise<Snapshot> {
-    const [f, c, t, e, l, g, rw, rd] = await Promise.all([
+    const [f, c, t, e, l, g, rw, rd, ft, pr] = await Promise.all([
       this.sb.from('families').select('*').single(),
       this.sb.from('children').select('id, family_id, name, birthdate, avatar').order('created_at'),
       this.sb.from('tasks').select('*').order('created_at'),
@@ -150,11 +178,13 @@ export class SupabaseRepo implements Repo {
       this.sb.from('goals').select('*').order('created_at'),
       this.sb.from('rewards').select('*').order('cost_points'),
       this.sb.from('redemptions').select('*').order('created_at', { ascending: false }).limit(200),
+      this.sb.from('feats').select('*').order('created_at', { ascending: false }).limit(200),
+      this.sb.from('praises').select('*').order('created_at', { ascending: false }).limit(200),
     ])
-    for (const r of [f, c, t, e, l, g, rw, rd]) fail(r.error)
+    for (const r of [f, c, t, e, l, g, rw, rd, ft, pr]) fail(r.error)
 
     // Fotos ficam num bucket privado: gera links temporários.
-    const paths = (e.data ?? []).map((r: any) => r.photo_path).filter(Boolean) as string[]
+    const paths = [...(e.data ?? []), ...(ft.data ?? [])].map((r: any) => r.photo_path).filter(Boolean) as string[]
     const signed = new Map<string, string>()
     if (paths.length) {
       const { data } = await this.sb.storage.from('evidence').createSignedUrls(paths, 60 * 60)
@@ -182,6 +212,21 @@ export class SupabaseRepo implements Repo {
       goals: (g.data ?? []).map(toGoal),
       rewards: (rw.data ?? []).map(toReward),
       redemptions: (rd.data ?? []).map(toRedemption),
+      feats: (ft.data ?? []).map(
+        (r: any): Feat => ({
+          id: r.id,
+          childId: r.child_id,
+          familyId: r.family_id,
+          title: r.title,
+          photoUrl: r.photo_path ? signed.get(r.photo_path) ?? null : null,
+          status: r.status,
+          points: r.points,
+          parentNote: r.parent_note,
+          createdAt: r.created_at,
+          reviewedAt: r.reviewed_at,
+        }),
+      ),
+      praises: (pr.data ?? []).map(toPraise),
     }
   }
 
@@ -209,6 +254,9 @@ export class SupabaseRepo implements Repo {
       weekdays: task.weekdays,
       child_ids: task.childIds,
       requires_photo: task.requiresPhoto,
+      category: task.category,
+      help_url: task.helpUrl || null,
+      month_day: task.recurrence === 'monthly' ? task.monthDay : null,
     }
     if (id) {
       fail((await this.sb.from('tasks').update(row).eq('id', id)).error)
@@ -222,14 +270,17 @@ export class SupabaseRepo implements Repo {
     fail((await this.sb.from('tasks').update({ active: false }).eq('id', id)).error)
   }
 
+  private async uploadPhoto(childId: string, photo: Blob | null): Promise<string | null> {
+    if (!photo) return null
+    const s = await this.getSession()
+    const path = `${s!.familyId}/${childId}/${uid()}.jpg`
+    const { error } = await this.sb.storage.from('evidence').upload(path, photo, { contentType: photo.type || 'image/jpeg' })
+    fail(error)
+    return path
+  }
+
   async submitExecution(taskId: string, childId: string, forDate: string, photo: Blob | null): Promise<void> {
-    let path: string | null = null
-    if (photo) {
-      const s = await this.getSession()
-      path = `${s!.familyId}/${childId}/${uid()}.jpg`
-      const { error } = await this.sb.storage.from('evidence').upload(path, photo, { contentType: photo.type || 'image/jpeg' })
-      fail(error)
-    }
+    const path = await this.uploadPhoto(childId, photo)
     const { error } = await this.sb.rpc('submit_execution', {
       p_task_id: taskId,
       p_child_id: childId,
@@ -270,7 +321,14 @@ export class SupabaseRepo implements Repo {
   }
 
   async saveReward(reward: NewReward, id?: string): Promise<void> {
-    const row = { title: reward.title, icon: reward.icon || '🎁', cost_points: reward.costPoints }
+    const limited = reward.limitCount && reward.limitPeriod
+    const row = {
+      title: reward.title,
+      icon: reward.icon || '🎁',
+      cost_points: reward.costPoints,
+      limit_count: limited ? reward.limitCount : null,
+      limit_period: limited ? reward.limitPeriod : null,
+    }
     if (id) fail((await this.sb.from('rewards').update(row).eq('id', id)).error)
     else {
       const s = await this.getSession()
@@ -288,5 +346,24 @@ export class SupabaseRepo implements Repo {
 
   async reviewRedemption(id: string, deliver: boolean): Promise<void> {
     fail((await this.sb.rpc('review_redemption', { p_redemption_id: id, p_deliver: deliver })).error)
+  }
+
+  async submitFeat(childId: string, title: string, photo: Blob | null): Promise<void> {
+    if (!title.trim()) throw new AppError('Conte o que você fez.')
+    const path = await this.uploadPhoto(childId, photo)
+    fail((await this.sb.rpc('submit_feat', { p_child_id: childId, p_title: title, p_photo_path: path })).error)
+  }
+
+  async reviewFeat(id: string, approve: boolean, points: number, note: string): Promise<void> {
+    fail((await this.sb.rpc('review_feat', { p_feat_id: id, p_approve: approve, p_points: points, p_note: note })).error)
+  }
+
+  async sendPraise(childId: string, message: string, points: number): Promise<void> {
+    if (!message.trim()) throw new AppError('Escreva o elogio.')
+    fail((await this.sb.rpc('send_praise', { p_child_id: childId, p_message: message, p_points: points })).error)
+  }
+
+  async reviewPraise(id: string, approve: boolean, points: number): Promise<void> {
+    fail((await this.sb.rpc('review_praise', { p_praise_id: id, p_approve: approve, p_points: points })).error)
   }
 }

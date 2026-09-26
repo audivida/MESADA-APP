@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { balance, levelFor, taskState, totalEarned, ageFrom } from './rules'
+import { balance, levelFor, taskState, totalEarned, ageFrom, periodStart, redemptionsLeft } from './rules'
 import type { Execution, LedgerEntry, Task } from './types'
 
 const task = (over: Partial<Task> = {}): Task => ({
   id: 't1', familyId: 'f', title: 'Cama', description: '', points: 5, recurrence: 'daily', weekdays: [], childIds: [],
-  requiresPhoto: false, active: true, createdAt: '2026-01-01T00:00:00Z', ...over,
+  requiresPhoto: false, category: null, helpUrl: null, monthDay: null, active: true, createdAt: '2026-01-01T00:00:00Z', ...over,
 })
 const ex = (over: Partial<Execution>): Execution => ({
   id: Math.random().toString(), taskId: 't1', childId: 'c1', familyId: 'f', forDate: '2026-09-26', photoUrl: null,
@@ -58,4 +58,34 @@ it('saldo livre desconta pedidos de prêmio abertos', async () => {
   const ledger = [entry(100)]
   const red = (status: 'pending' | 'delivered' | 'rejected') => ({ id: status, rewardId: 'r', childId: 'c1', familyId: 'f', costPoints: 30, status, createdAt: '', reviewedAt: null })
   expect(available(ledger, [red('pending'), red('rejected'), red('delivered')], 'c1')).toBe(70)
+})
+
+describe('tarefa mensal', () => {
+  const t = task({ recurrence: 'monthly', monthDay: 10 })
+  it('aparece a partir do dia escolhido até o fim do mês', () => {
+    expect(taskState(t, 'c1', [], new Date(2026, 8, 9))).toBeNull()
+    expect(taskState(t, 'c1', [], new Date(2026, 8, 10))).toBe('todo')
+    expect(taskState(t, 'c1', [ex({ forDate: '2026-09-12', status: 'approved' })], new Date(2026, 8, 25))).toBe('done')
+    expect(taskState(t, 'c1', [ex({ forDate: '2026-09-12', status: 'approved' })], new Date(2026, 9, 10))).toBe('todo')
+  })
+  it('em mês curto usa o último dia', () => {
+    expect(taskState(task({ recurrence: 'monthly', monthDay: 31 }), 'c1', [], new Date(2026, 1, 28))).toBe('todo')
+  })
+})
+
+describe('limite de prêmio', () => {
+  it('semana começa na segunda', () => {
+    expect(periodStart('week', new Date(2026, 8, 27)).getDate()).toBe(21) // domingo 27/09 -> segunda 21/09
+    expect(periodStart('month', new Date(2026, 8, 27)).getDate()).toBe(1)
+  })
+  it('conta só pedidos não recusados do período', () => {
+    const reward = { id: 'r', familyId: 'f', title: 'Açaí', icon: '🍧', costPoints: 5, limitCount: 1, limitPeriod: 'week' as const, active: true }
+    const red = (createdAt: string, status: 'pending' | 'delivered' | 'rejected') => ({ id: createdAt + status, rewardId: 'r', childId: 'c1', familyId: 'f', costPoints: 5, status, createdAt, reviewedAt: null })
+    const now = new Date(2026, 8, 24, 12)
+    expect(redemptionsLeft(reward, [], 'c1', now)).toBe(1)
+    expect(redemptionsLeft(reward, [red(new Date(2026, 8, 22).toISOString(), 'rejected')], 'c1', now)).toBe(1)
+    expect(redemptionsLeft(reward, [red(new Date(2026, 8, 22).toISOString(), 'delivered')], 'c1', now)).toBe(0)
+    expect(redemptionsLeft(reward, [red(new Date(2026, 8, 18).toISOString(), 'delivered')], 'c1', now)).toBe(1)
+    expect(redemptionsLeft({ ...reward, limitCount: null, limitPeriod: null }, [], 'c1', now)).toBeNull()
+  })
 })

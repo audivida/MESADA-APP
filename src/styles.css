@@ -502,7 +502,7 @@ body:has(.kid-theme) { background: #16225e; }
 }
 .kid-theme .goal.is-done { background: linear-gradient(180deg, #33b865, #25964f); }
 .kid-theme .ledger-row { border-bottom-color: var(--line); }
-.kid-theme .kind-task .ledger-amt b, .kid-theme .kind-bonus .ledger-amt b, .kid-theme .kind-goal .ledger-amt b { color: var(--lime); }
+.kid-theme .kind-task .ledger-amt b, .kid-theme .kind-bonus .ledger-amt b, .kid-theme .kind-goal .ledger-amt b, .kid-theme .kind-feat .ledger-amt b, .kid-theme .kind-praise .ledger-amt b { color: var(--lime); }
 .kid-theme .bar { background: var(--ink-line); border: 2px solid var(--ink-line); height: 14px; }
 .kid-theme .bar-fill { box-shadow: inset 0 3px 0 rgba(255, 255, 255, 0.35); }
 .kid-theme .bar-fill.coin { background: var(--sun); }
@@ -616,3 +616,49 @@ body:has(.kid-theme) { background: #16225e; }
 .kid-theme .unit-banner .eyebrow { -webkit-text-stroke: 2px var(--ink-line); }
 .kid-theme .alert { -webkit-text-stroke: 2.5px var(--ink-line); }
 .kid-theme .btn { -webkit-text-stroke: 0; }
+
+/* ============ Ideias do goonplay: categorias, façanhas, elogios, atalhos, limites ============ */
+.cat-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; flex: none; }
+.help-link { display: inline-flex; gap: 4px; align-items: center; font-weight: 700; color: var(--brand); text-decoration: none; margin-top: 2px; }
+.help-link:hover { text-decoration: underline; }
+.quick-row { flex-wrap: wrap; }
+.quick-chip b { margin-left: 4px; }
+.quick-chip.bonus b { color: var(--ok); }
+.quick-chip.penalty b { color: var(--warn, #c0392b); }
+.file-chip { cursor: pointer; justify-self: start; }
+.praise-msg { font-weight: 700; font-size: 1.05rem; }
+.praise-card .praise-msg { margin: 0; }
+.praise-wall { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.praise-note {
+  display: grid; gap: 4px; padding: 12px 14px; border-radius: 14px;
+  background: color-mix(in srgb, #ff4fa3 14%, var(--surface)); border: 1.5px solid color-mix(in srgb, #ff4fa3 45%, transparent);
+}
+.praise-note:nth-child(even) { transform: rotate(0.6deg); }
+.praise-note:nth-child(odd) { transform: rotate(-0.6deg); }
+.limit-tag { font-weight: 700; }
+.btn-feat {
+  background: linear-gradient(180deg, #c49bff 0%, #8b4dff 60%, #6a2ee0 100%); color: #fff; font-size: 1.1rem;
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.2);
+}
+.btn-feat:hover { filter: brightness(1.05); }
+.feat-box .btn-feat { animation: feat-glow 2.4s ease-in-out infinite; }
+@keyframes feat-glow {
+  0%, 100% { box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.2), 0 0 0 0 rgba(139, 77, 255, 0.5); }
+  50% { box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.2), 0 0 0 8px rgba(139, 77, 255, 0); }
+}
+
+.kid-theme .praise-note { border: 3px solid var(--ink-line); box-shadow: var(--shadow); background: linear-gradient(180deg, #ff7cc0 0%, var(--pink) 100%); color: #fff; }
+.kid-theme .praise-note .muted { color: rgba(255, 255, 255, 0.85); }
+.kid-theme .btn-feat {
+  font-family: var(--game-font); font-weight: 400; letter-spacing: 0.02em;
+  border: 3px solid var(--ink-line); box-shadow: 0 5px 0 var(--ink-line);
+  text-shadow: 0 2px 0 var(--ink-line);
+}
+.kid-theme .btn-feat:active { transform: translateY(4px); box-shadow: 0 1px 0 var(--ink-line); }
+.kid-theme .help-link { color: var(--cyan); }
+.kid-theme .cat-dot { border: 2px solid var(--ink-line); width: 12px; height: 12px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .feat-box .btn-feat { animation: none; }
+  .praise-note { transform: none !important; }
+}

@@ -11,6 +11,7 @@ export function Overview({ goApprove, goRewards, goFamily }: { goApprove(): void
   const { children, executions, ledger, tasks, family } = data
   const pending = executions.filter((e) => e.status === 'pending')
   const requests = data.redemptions.filter((r) => r.status === 'pending')
+  const extras = data.feats.filter((f) => f.status === 'pending').length + data.praises.filter((p) => p.status === 'pending').length
 
   return (
     <div className="stack-lg">
@@ -20,6 +21,14 @@ export function Overview({ goApprove, goRewards, goFamily }: { goApprove(): void
         <button className="alert" onClick={goApprove}>
           <span className="alert-num">{pending.length}</span>
           <span>{pending.length === 1 ? 'tarefa esperando sua aprovação' : 'tarefas esperando sua aprovação'}</span>
+          <span aria-hidden>→</span>
+        </button>
+      )}
+
+      {extras > 0 && (
+        <button className="alert" onClick={goApprove}>
+          <span className="alert-num">{extras}</span>
+          <span>{extras === 1 ? 'façanha ou elogio para ver' : 'façanhas e elogios para ver'}</span>
           <span aria-hidden>→</span>
         </button>
       )}

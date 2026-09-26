@@ -1,4 +1,4 @@
-import type { Child, Execution, LedgerEntry, Redemption, Task } from './types'
+import type { Child, Execution, LedgerEntry, LimitPeriod, Redemption, Reward, Task, TaskCategory } from './types'
 
 export interface Level {
   id: 'bronze' | 'prata' | 'ouro' | 'diamante'
@@ -59,8 +59,14 @@ export function taskAppliesTo(task: Task, child: Pick<Child, 'id'>): boolean {
   return task.active && (task.childIds.length === 0 || task.childIds.includes(child.id))
 }
 
+export function daysInMonth(date: Date): number {
+  return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate()
+}
+
 export function scheduledOn(task: Task, date: Date): boolean {
   if (task.recurrence === 'weekly') return task.weekdays.includes(date.getDay())
+  // Mensal: aparece a partir do dia escolhido (ou do último dia, em meses curtos) até o fim do mês.
+  if (task.recurrence === 'monthly') return date.getDate() >= Math.min(task.monthDay ?? 1, daysInMonth(date))
   return true
 }
 
@@ -81,7 +87,7 @@ export function taskState(
   if (!taskAppliesTo(task, { id: childId }) || !scheduledOn(task, date)) return null
   const day = todayISO(date)
   const mine = executions
-    .filter((e) => e.taskId === task.id && e.childId === childId && (task.recurrence === 'once' || e.forDate === day))
+    .filter((e) => e.taskId === task.id && e.childId === childId && (task.recurrence === 'once' || e.forDate === day || (task.recurrence === 'monthly' && e.forDate.slice(0, 7) === day.slice(0, 7))))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
   const last = mine[0]
   if (!last) return 'todo'
@@ -100,3 +106,32 @@ export function ageFrom(birthdate: string | null, now = new Date()): number | nu
 }
 
 export const WEEKDAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
+
+export const CATEGORIES: Record<TaskCategory, { label: string; color: string; icon: string }> = {
+  casa: { label: 'Casa', color: '#34d399', icon: '🏠' },
+  estudos: { label: 'Estudos', color: '#60a5fa', icon: '📚' },
+  saude: { label: 'Saúde e esporte', color: '#fbbf24', icon: '⚽' },
+  cuidados: { label: 'Cuidados pessoais', color: '#c084fc', icon: '🪥' },
+}
+
+export const LIMIT_LABEL: Record<LimitPeriod, string> = { week: 'semana', month: 'mês', year: 'ano' }
+export const THIS_PERIOD: Record<LimitPeriod, string> = { week: 'nesta semana', month: 'neste mês', year: 'neste ano' }
+
+/** Início do período atual. A semana começa na segunda, como no servidor. */
+export function periodStart(period: LimitPeriod, now = new Date()): Date {
+  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  if (period === 'week') d.setDate(d.getDate() - ((d.getDay() + 6) % 7))
+  else if (period === 'month') d.setDate(1)
+  else d.setMonth(0, 1)
+  return d
+}
+
+/** Quantos pedidos ainda cabem no período. Nulo = prêmio sem limite. */
+export function redemptionsLeft(reward: Reward, redemptions: Redemption[], childId: string, now = new Date()): number | null {
+  if (!reward.limitCount || !reward.limitPeriod) return null
+  const since = periodStart(reward.limitPeriod, now).getTime()
+  const used = redemptions.filter(
+    (r) => r.rewardId === reward.id && r.childId === childId && r.status !== 'rejected' && new Date(r.createdAt).getTime() >= since,
+  ).length
+  return Math.max(0, reward.limitCount - used)
+}

@@ -1,4 +1,4 @@
-import type { Child, Execution, Family, Goal, LedgerEntry, LedgerKind, NewReward, NewTask, Redemption, Reward, Task } from '../domain/types'
+import type { Child, Execution, Family, Feat, Goal, LedgerEntry, LedgerKind, NewReward, NewTask, Praise, Redemption, Reward, Task } from '../domain/types'
 
 export type Session =
   | { role: 'parent'; familyId: string | null; name: string }
@@ -13,6 +13,8 @@ export interface Snapshot {
   goals: Goal[]
   rewards: Reward[]
   redemptions: Redemption[]
+  feats: Feat[]
+  praises: Praise[]
 }
 
 export interface NewChild {
@@ -59,6 +61,14 @@ export interface Repo {
   requestRedemption(rewardId: string, childId: string): Promise<void>
   /** Pais entregam (desconta os pontos) ou recusam. */
   reviewRedemption(id: string, deliver: boolean): Promise<void>
+
+  /** Filho conta uma façanha (algo bom que fez sem ninguém pedir). */
+  submitFeat(childId: string, title: string, photo: Blob | null): Promise<void>
+  /** Pais aprovam escolhendo os pontos, ou recusam. */
+  reviewFeat(id: string, approve: boolean, points: number, note: string): Promise<void>
+  /** Pais: vale na hora (pontos opcionais). Filho: vai para os pais aprovarem, sem pontos. */
+  sendPraise(childId: string, message: string, points: number): Promise<void>
+  reviewPraise(id: string, approve: boolean, points: number): Promise<void>
 }
 
 export class AppError extends Error {}

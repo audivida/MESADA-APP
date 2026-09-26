@@ -6,8 +6,9 @@ import { GoalCard, LedgerList } from '../../components/Ledger'
 import { ageFrom, balance, formatMoney, totalEarned } from '../../domain/rules'
 import { Trail, TrailSummary } from '../../components/Trail'
 import { streak } from '../../domain/trail'
+import { PRAISE_IDEAS, QUICK_ACTIONS } from '../../app/brand'
 
-type Action = null | 'bonus' | 'penalty' | 'payout' | 'goal'
+type Action = null | 'bonus' | 'penalty' | 'payout' | 'goal' | 'praise'
 
 const ACTION_TITLE = {
   bonus: 'Dar bônus',
@@ -75,12 +76,59 @@ export function ChildSheet({ childId, onClose }: { childId: string; onClose(): v
           <Button variant="ghost" onClick={() => setAction('penalty')}>
             − Desconto
           </Button>
+          <Button variant="ghost" onClick={() => setAction('praise')}>
+            💌 Elogiar
+          </Button>
           <Button variant="coin" onClick={() => { setAction('payout'); setPoints(String(Math.max(0, bal))) }}>
             Pagar mesada
           </Button>
         </div>
 
-        {action && action !== 'goal' && (
+        <div className="stack-xs">
+          <span className="field-label">Atalhos</span>
+          <div className="chip-row quick-row">
+            {QUICK_ACTIONS.map((q) => (
+              <button
+                key={q.label}
+                type="button"
+                className={`chip quick-chip ${q.kind}`}
+                disabled={busy}
+                onClick={() => void go(() => repo.addLedger(child.id, q.points, q.kind, q.label), `${q.kind === 'bonus' ? '+' : '−'}${q.points} pts · ${q.label}`)}
+              >
+                {q.icon} {q.label} <b>{q.kind === 'bonus' ? '+' : '−'}{q.points}</b>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {action === 'praise' && (
+          <form
+            className="stack card inset"
+            onSubmit={(e) => {
+              e.preventDefault()
+              void go(() => repo.sendPraise(child.id, note, Number(points) || 0), `Elogio enviado para ${child.name} 💌`)
+            }}
+          >
+            <h3>Elogiar {child.name}</h3>
+            <Field label="Elogio" required maxLength={200} value={note} onChange={(e) => setNote(e.target.value)} />
+            <div className="chip-row">
+              {PRAISE_IDEAS.map((q) => (
+                <button key={q} type="button" className="chip" onClick={() => setNote(q)}>
+                  {q}
+                </button>
+              ))}
+            </div>
+            <Field label="Pontos junto (opcional)" type="number" min={0} value={points} onChange={(e) => setPoints(e.target.value)} />
+            <div className="chip-row">
+              <Button busy={busy}>Enviar elogio</Button>
+              <Button type="button" variant="ghost" onClick={reset}>
+                Cancelar
+              </Button>
+            </div>
+          </form>
+        )}
+
+        {action && action !== 'goal' && action !== 'praise' && (
           <form
             className="stack card inset"
             onSubmit={(e) => {
